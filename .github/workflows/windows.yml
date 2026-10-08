@@ -1,0 +1,50 @@
+name: ESP32 Call Bridge Windows
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'firmware/**'
+      - '.github/workflows/firmware.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -r requirements.txt pyinstaller==6.22.3
+      - run: python -m unittest discover
+      - run: python -m PyInstaller --noconfirm --windowed --onedir --name ESP32CallBridge app.py
+      - name: Verify bundled AAC codec
+        shell: pwsh
+        run: |
+          $report = Join-Path $env:RUNNER_TEMP 'aac-self-test.json'
+          $app = Start-Process -FilePath dist/ESP32CallBridge/ESP32CallBridge.exe -ArgumentList '--quality-self-test', $report -Wait -PassThru -WindowStyle Hidden
+          if ($app.ExitCode -ne 0 -or !(Test-Path $report)) { throw 'Bundled AAC self-test failed' }
+          if (!(Get-Content $report -Raw | ConvertFrom-Json).ok) { throw 'Bundled AAC output failed' }
+      - name: Package
+        shell: pwsh
+        run: |
+          Copy-Item README.md dist/ESP32CallBridge/README.md
+          Copy-Item LICENSE dist/ESP32CallBridge/LICENSE
+          Copy-Item FIRMWARE_INSTALL.md dist/ESP32CallBridge/FIRMWARE_INSTALL.md
+          Copy-Item LICENSING.md dist/ESP32CallBridge/LICENSING.md
+          Copy-Item THIRD_PARTY_NOTICES.md dist/ESP32CallBridge/THIRD_PARTY_NOTICES.md
+          python tools/collect_notices.py --bundle dist/ESP32CallBridge --output dist/ESP32CallBridge/licenses
+          if ($LASTEXITCODE -ne 0) { throw 'License collection failed' }
+          Copy-Item -Recurse licenses/native-reference,licenses/firmware-reference -Destination dist/ESP32CallBridge/licenses
+          Copy-Item licenses/reference-sources.json dist/ESP32CallBridge/licenses/reference-sources.json
+          git rev-parse HEAD | Set-Content dist/ESP32CallBridge/source-commit.txt
+          Compress-Archive -Path dist/ESP32CallBridge -DestinationPath ESP32-Call-Bridge-Windows.zip
+          (Get-FileHash ESP32-Call-Bridge-Windows.zip -Algorithm SHA256).Hash | Set-Content SHA256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ESP32-Call-Bridge-Windows
+          path: |
+            ESP32-Call-Bridge-Windows.zip
+            SHA256.txt

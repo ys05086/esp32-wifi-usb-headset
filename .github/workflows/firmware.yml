@@ -1,0 +1,70 @@
+name: Firmware
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'firmware/**'
+      - '.github/workflows/firmware.yml'
+
+jobs:
+  firmware:
+    runs-on: ubuntu-latest
+    container: espressif/idf:v5.5.1
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test finite probe signal
+        shell: bash
+        run: |
+          gcc -Wall -Wextra -Werror -Ifirmware/main firmware/main/probe_tone.c firmware/tests/probe_test.c -lm -o /tmp/probe-test
+          /tmp/probe-test
+          gcc -Wall -Wextra -Werror -Ifirmware/main firmware/main/wifi_pcm.c firmware/tests/wifi_pcm_test.c -o /tmp/wifi-test
+          /tmp/wifi-test
+          gcc -Wall -Wextra -Werror -Ifirmware/main firmware/tests/mic_fifo_test.c -o /tmp/mic-fifo-test
+          /tmp/mic-fifo-test
+          python firmware/tests/iso_prime_test.py
+          python firmware/tests/mic_trace_test.py
+      - name: Build ESP32-S3 firmware
+        shell: bash
+        working-directory: firmware
+        run: |
+          . /opt/esp/idf/export.sh
+          idf.py set-target esp32s3
+          idf.py build
+          python tests/feedback_startup_test.py managed_components/espressif__tinyusb
+          python tests/mic_presubmit_test.py managed_components/espressif__tinyusb
+          python tests/adaptive_descriptor_test.py managed_components/espressif__usb_device_uac managed_components/espressif__tinyusb
+          idf.py merge-bin
+          mkdir -p dist
+          cp THIRD_PARTY_NOTICES.md dist/
+          cp LICENSE dist/
+          mkdir -p dist/licenses/esp-idf
+          cp "$IDF_PATH/LICENSE" dist/licenses/esp-idf/
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib, json, shutil
+          records = []
+          for component in sorted(Path('managed_components').iterdir()):
+              if not component.is_dir():
+                  continue
+              for source in sorted(component.iterdir()):
+                  if source.is_file() and source.name.lower().startswith(('license', 'copying', 'notice', 'copyright')):
+                      target = Path('dist/licenses') / component.name / source.name
+                      target.parent.mkdir(parents=True, exist_ok=True)
+                      shutil.copyfile(source, target)
+          for target in sorted(Path('dist/licenses').rglob('*')):
+              if target.is_file():
+                  records.append({'file': str(target.relative_to('dist')), 'sha256': hashlib.sha256(target.read_bytes()).hexdigest()})
+          Path('dist/licenses/inventory.json').write_text(json.dumps(records, indent=2))
+          PY
+          cp build/merged-binary.bin dist/esp32-wifi-usb-headset.bin
+          cp build/esp32_wifi_usb_headset.bin dist/esp32-wifi-usb-headset-app.bin
+          cp build/flasher_args.json dist/
+          cp dependencies.lock dist/
+          printf '%s\n' "$GITHUB_SHA" > dist/source-commit.txt
+          cd dist
+          sha256sum esp32-wifi-usb-headset.bin esp32-wifi-usb-headset-app.bin > SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: esp32-wifi-usb-headset-firmware
+          path: firmware/dist/

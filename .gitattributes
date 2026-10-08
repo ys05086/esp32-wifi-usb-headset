@@ -1,0 +1,2 @@
+# Keep collected upstream notice bytes identical to their recorded SHA-256.
+licenses/** -text

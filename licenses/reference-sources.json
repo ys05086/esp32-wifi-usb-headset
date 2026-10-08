@@ -1,0 +1,65 @@
+[
+  {
+    "file": "native-reference/FFmpeg-COPYING.GPLv2",
+    "source": "https://raw.githubusercontent.com/FFmpeg/FFmpeg/n8.0/COPYING.GPLv2",
+    "note": "FFmpeg 8.0 reference; exact wheel build commit remains unverified",
+    "sha256": "8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643"
+  },
+  {
+    "file": "native-reference/FFmpeg-COPYING.GPLv3",
+    "source": "https://raw.githubusercontent.com/FFmpeg/FFmpeg/n8.0/COPYING.GPLv3",
+    "note": "FFmpeg 8.0 reference; exact wheel build commit remains unverified",
+    "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+  },
+  {
+    "file": "native-reference/FFmpeg-COPYING.LGPLv2.1",
+    "source": "https://raw.githubusercontent.com/FFmpeg/FFmpeg/n8.0/COPYING.LGPLv2.1",
+    "note": "FFmpeg 8.0 reference; exact wheel build commit remains unverified",
+    "sha256": "246041b6ecf9bc32d718a62c57877c78b5eb397b6467e74ed7ae2626ab189c30"
+  },
+  {
+    "file": "native-reference/FFmpeg-COPYING.LGPLv3",
+    "source": "https://raw.githubusercontent.com/FFmpeg/FFmpeg/n8.0/COPYING.LGPLv3",
+    "note": "FFmpeg 8.0 reference; exact wheel build commit remains unverified",
+    "sha256": "da7eabb7bafdf7d3ae5e9f223aa5bdc1eece45ac569dc21b3b037520b4464768"
+  },
+  {
+    "file": "native-reference/FFmpeg-LICENSE.md",
+    "source": "https://raw.githubusercontent.com/FFmpeg/FFmpeg/n8.0/LICENSE.md",
+    "note": "FFmpeg 8.0 reference; exact wheel build commit remains unverified",
+    "sha256": "2e1d16c72fd74e12063776371da757322f8b77589386532f4fd8634bde7de1af"
+  },
+  {
+    "file": "native-reference/PortAudio-LICENSE.txt",
+    "source": "https://raw.githubusercontent.com/PortAudio/portaudio/v19.7.0/LICENSE.txt",
+    "note": "v19.7.0 is referenced in installed PortAudio binary build workflow",
+    "sha256": "ec52a1952d701f94e5135719a47376da4ee0b4a0201f1cafb49f61db6480ac3d"
+  },
+  {
+    "file": "native-reference/Tcl-license.terms",
+    "source": "https://raw.githubusercontent.com/tcltk/tcl/core-8-6-12/license.terms",
+    "note": "Reference from Tcl 8.6.12; local runtime reports this version",
+    "sha256": "c0a69a2bfd757361ec7e6143973b103c90409316b49e9c88db26ad6388e79f16"
+  },
+  {
+    "file": "firmware-reference/ESP-IDF-5.5.1-LICENSE",
+    "source": "https://raw.githubusercontent.com/espressif/esp-idf/v5.5.1/LICENSE",
+    "note": "Main IDF license; subcomponent notices remain to be resolved",
+    "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+  },
+  {
+    "file": "native-reference/Tk-license.terms",
+    "source": "Reference: installed Python 3.10.8 Tcl/Tk runtime",
+    "sha256": "0d1e4405f6273f091732764ed89b57066be63ce64869be6c71ea337dc4f2f9b5"
+  },
+  {
+    "file": "firmware-reference/usb_device_uac-1.3.1-license.txt",
+    "source": "Pinned espressif/usb_device_uac 1.3.1 component",
+    "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+  },
+  {
+    "file": "firmware-reference/tinyusb-0.19.0~3-LICENSE",
+    "source": "Pinned espressif/tinyusb 0.19.0~3 component",
+    "sha256": "b171720e8a442e7a3957d83c62cd3299dbb29da3db534cc626f9dded0de2ca44"
+  }
+]
