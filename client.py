@@ -157,7 +157,7 @@ class HeadsetClient:
                             except BlockingIOError: break
                             if len(data) == 24 and data[:4] == b'VSA2':
                                 _, self.board_received, self.board_underruns, _, _, self.board_return_drops = struct.unpack('<4sIIIII', data)
-                                last_ack = time.monotonic(); self.status = '양방향 연결됨 · 상대방 소리는 선택한 출력으로 재생'
+                                last_ack = time.monotonic(); self.status = '양방향 연결됨 · 기기 소리는 선택한 출력으로 재생'
                             else: self.returns.push(data)
                     if now - max(started, last_ack) > 8:
                         raise RuntimeError('보드 응답 없음: IP·같은 네트워크·양방향 펌웨어를 확인하세요.')

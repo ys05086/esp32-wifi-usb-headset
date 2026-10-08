@@ -15,7 +15,7 @@ CONFIG = Path(sys.executable if getattr(sys, 'frozen', False) else __file__).par
 class App:
     def __init__(self, root):
         self.root, self.client = root, None
-        root.title('ESP32 Call Bridge · PC 통화'); root.geometry('700x760'); root.minsize(660, 740)
+        root.title('ESP32 Call Bridge'); root.geometry('700x760'); root.minsize(660, 740)
         root.configure(bg='#f5f1fa')
         style=ttk.Style(); style.theme_use('clam')
         style.configure('.',font=('맑은 고딕',10),background='#f5f1fa',foreground='#393247')
@@ -23,7 +23,7 @@ class App:
         style.configure('TEntry',padding=8); style.configure('TCombobox',padding=7)
         frame=ttk.Frame(root,padding=24); frame.pack(fill='both',expand=True)
         ttk.Label(frame,text='ESP32 Call Bridge',font=('맑은 고딕',23,'bold')).pack(anchor='w')
-        ttk.Label(frame,text='휴대폰 통화를 PC 마이크와 헤드폰으로',padding=(0,6,0,18)).pack(anchor='w')
+        ttk.Label(frame,text='USB로 꽂은 기기의 소리를 Wi-Fi로 PC에서 듣고, PC 마이크를 그 기기에',padding=(0,6,0,18)).pack(anchor='w')
         self.host=tk.StringVar(value='192.168.0.14')
         try: saved=json.loads(CONFIG.read_text(encoding='utf-8-sig')); self.host.set(saved.get('host',self.host.get()))
         except (OSError,ValueError): saved={}
@@ -35,9 +35,9 @@ class App:
         self.board=BoardStatus()
         self.usb_mode=tk.StringVar(value='USB 모드 · 확인 중…')
         ttk.Label(frame,textvariable=self.usb_mode,padding=(0,0,0,10)).pack(anchor='w')
-        ttk.Label(frame,text='내 목소리 · PC 마이크 / 오디오 입력').pack(anchor='w')
+        ttk.Label(frame,text='보낼 소리 · PC 마이크 / 오디오 입력').pack(anchor='w')
         self.input=ttk.Combobox(frame,state='readonly');self.input.pack(fill='x',pady=(4,10))
-        ttk.Label(frame,text='상대방 소리 · PC 이어폰 / 헤드폰').pack(anchor='w')
+        ttk.Label(frame,text='기기 소리 · PC 이어폰 / 헤드폰').pack(anchor='w')
         self.output=ttk.Combobox(frame,state='readonly');self.output.pack(fill='x',pady=(4,10))
         row=ttk.Frame(frame);row.pack(fill='x',pady=(0,8))
         ttk.Label(row,text='듣기 버퍼 · 클수록 안정적, 지연 증가').pack(side='left')
@@ -47,8 +47,8 @@ class App:
         self.buffer.pack(side='left',padx=8);ttk.Label(row,text='ms').pack(side='left')
         self.mute=tk.BooleanVar(); self.deafen=tk.BooleanVar()
         row=ttk.Frame(frame);row.pack(fill='x',pady=5)
-        ttk.Checkbutton(row,text='내 마이크 음소거',variable=self.mute,command=self.controls).pack(side='left')
-        ttk.Checkbutton(row,text='상대방 소리 음소거',variable=self.deafen,command=self.controls).pack(side='right')
+        ttk.Checkbutton(row,text='보낼 소리 음소거',variable=self.mute,command=self.controls).pack(side='left')
+        ttk.Checkbutton(row,text='기기 소리 음소거',variable=self.deafen,command=self.controls).pack(side='right')
         self.volume=tk.DoubleVar(value=80)
         row=ttk.Frame(frame);row.pack(fill='x')
         ttk.Label(row,text='듣기 크기').pack(side='left')
@@ -58,7 +58,7 @@ class App:
         self.button=ttk.Button(row,text='연결 시작',command=self.toggle);self.button.pack(side='left',expand=True,fill='x')
         self.refresh_button=ttk.Button(row,text='장치 새로고침',command=self.refresh);self.refresh_button.pack(side='left',padx=(10,0))
         ttk.Button(row,text='진단 저장',command=self.save_diagnostics).pack(side='left',padx=(8,0))
-        self.status=tk.StringVar(value='ESP32 USB를 휴대폰에 연결하세요. 전화 걸기·받기는 휴대폰에서 해요.')
+        self.status=tk.StringVar(value='ESP32의 USB 포트를 소리를 들을 기기에 연결하세요.')
         ttk.Label(frame,textvariable=self.status,wraplength=570).pack(anchor='w')
         self.stats=tk.StringVar();ttk.Label(frame,textvariable=self.stats,wraplength=570,padding=(0,8)).pack(anchor='w')
         ttk.Label(frame,textvariable=self.quality_label,foreground='#766d82',wraplength=610).pack(anchor='w')
@@ -135,7 +135,7 @@ class App:
             c=self.client;self.status.set(c.status)
             if active and c.quality.mode=='aac':
                 wait=c.quality_report.get('pending_ms',0)+c.outbound.qsize()*10+c.captured.qsize()*10
-                self.quality_label.set(f'{c.quality.label} · AAC/송신 대기 약 {wait:.0f} ms\n추가 대기 추정치이며 전체 통화 지연은 아니에요. · 송신 부족 {c.send_underruns} · AAC 버림 {c.quality_drops}')
+                self.quality_label.set(f'{c.quality.label} · AAC/송신 대기 약 {wait:.0f} ms\n추가 대기 추정치이며 전체 지연은 아니에요. · 송신 부족 {c.send_underruns} · AAC 버림 {c.quality_drops}')
             else:self.quality_label.set(self.quality.label)
             self.stats.set(f'입력 {c.input_rate} Hz → 전송 48000 Hz → 출력 {c.output_rate} Hz\n송신: 보냄 {c.sent} · 보드 수신 {c.board_received} · 보드 버퍼 부족 {c.board_underruns}\n듣기: 수신 {c.returns.received} · 버퍼 {c.returns.queued_ms} ms · 누락 {c.returns.lost}\n듣기 버퍼 부족 {c.returns.underruns} · 출력 장치 오류 {c.playback_errors} · 입력 버림 {c.input_drops}')
         self.root.after(250,self.poll)

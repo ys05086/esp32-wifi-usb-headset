@@ -13,7 +13,7 @@ def show_quality(parent, settings, active, apply):
     pane = ttk.Frame(window, padding=24)
     pane.pack(fill='both', expand=True)
     ttk.Label(pane, text='보내는 목소리의 질감', font=('맑은 고딕',17,'bold')).grid(row=0,column=0,columnspan=2,sticky='w',pady=(0,10))
-    ttk.Label(pane, text='보내는 음성의 샘플레이트와 AAC 압축 음질을 조절해요.\n상대방에게서 돌아오는 소리는 변경하지 않아요.',wraplength=430).grid(row=1,column=0,columnspan=2,sticky='w',pady=(0,16))
+    ttk.Label(pane, text='보내는 음성의 샘플레이트와 AAC 압축 음질을 조절해요.\n기기에서 돌아오는 소리는 변경하지 않아요.',wraplength=430).grid(row=1,column=0,columnspan=2,sticky='w',pady=(0,16))
     modes={'원음 PCM · 추가 압축 없음':'pcm','AAC 압축·복원 · 실험':'aac'}
     mode=tk.StringVar(value=next(k for k,v in modes.items() if v==settings.mode))
     rate=tk.StringVar(value=str(settings.sample_rate))

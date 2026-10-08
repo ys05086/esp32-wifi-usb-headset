@@ -5,7 +5,7 @@
 ## 준비와 펌웨어 받기
 
 - **COM → PC**: 펌웨어 설치·로그용 USB 직렬 포트.
-- **USB / OTG → 통화용 휴대폰**: 설치 후 오디오용 포트.
+- **USB / OTG → 소리를 들을 기기**: 설치 후 오디오용 포트.
 - 데이터 전송이 되는 USB 케이블을 사용합니다. 설치할 때는 통화를 끝내고 보드의 USB/OTG 쪽은 분리합니다.
 - [Firmware Actions](https://github.com/ys05086/esp32-wifi-usb-headset/actions/workflows/firmware.yml)의 성공한 실행에서 `esp32-wifi-usb-headset-firmware` artifact를 내려받아 압축을 풉니다. Actions artifact를 받으려면 GitHub 로그인이 필요합니다. PC 앱 ZIP에는 펌웨어가 들어 있지 않습니다.
 - 실행의 소스 커밋과 `source-commit.txt`를 확인합니다. 최신 빌드 성공만으로 음질 검증이 끝난 것은 아닙니다.
@@ -75,9 +75,9 @@ ESP32-S3와 16 MB 플래시가 확인되어야 합니다. COM이 나타나지 �
 2. 브라우저에서 `http://192.168.4.1`을 열고 **2.4 GHz 공유기** 이름과 비밀번호를 저장합니다. 보드 AP의 ‘인터넷 없음’ 표시는 설정 단계에서는 정상입니다.
 3. `router_ip`에 나타난 주소를 기록한 뒤 PC/휴대폰을 원래 네트워크로 돌립니다. PC는 동일 LAN의 유선 또는 5 GHz를 써도 됩니다. PC 앱에는 `192.168.4.1` 대신 기록한 공유기 주소를 입력합니다.
 4. 설정 페이지의 **USB compatibility**를 선택하고 저장합니다. Standard/Apple/Adaptive는 호환성 프로필이며 OS 자동 감지가 아닙니다. 저장 후 USB와 COM 전원을 모두 끊었다 다시 켜야 적용됩니다.
-5. **USB/OTG 포트**를 통화용 기기에 연결합니다. 현재 iPhone 시험에서는 Adaptive로 양방향 통신을 확인했지만 간헐적인 마이크 끊김이 남아 있습니다. Standard는 시험한 iPhone에서 입력은 되지만 출력이 나오지 않았습니다. 기기별로 확인하세요.
-6. PC 앱에서 마이크와 헤드폰, 보드 IP를 선택하고 연결합니다. 휴대폰에서 녹음으로 입력을, 소리 재생으로 반환 경로를 각각 확인한 뒤 통화를 시험합니다. 앱에 ‘연결됨’이 표시되는 것만으로 통화 앱의 라우팅까지 검증되지는 않습니다.
+5. **USB/OTG 포트**를 소리를 들을 기기에 연결합니다. 현재 iPhone 시험에서는 Adaptive로 양방향 통신을 확인했지만 간헐적인 마이크 끊김이 남아 있습니다. Standard는 시험한 iPhone에서 입력은 되지만 출력이 나오지 않았습니다. 기기별로 확인하세요.
+6. PC 앱에서 마이크와 헤드폰, 보드 IP를 선택하고 연결합니다. 꽂은 기기에서 녹음으로 마이크 방향을, 소리 재생으로 컴퓨터에서 들리는지를 각각 확인합니다. 앱에 ‘연결됨’이 표시되는 것만으로 기기의 각 앱이 USB 오디오를 쓰는지까지 확인되지는 않습니다.
 
-Lightning iPhone은 USB 호스트 연결을 지원하는 어댑터와 필요시 외부 전원이 필요합니다. 단순 Lightning–USB-C 충전 케이블로 연결되는 것으로 가정하지 마세요. 통화 기기에 맞는 USB 데이터/호스트 연결을 사용합니다.
+Lightning iPhone은 USB 호스트 연결을 지원하는 어댑터와 필요시 외부 전원이 필요합니다. 단순 Lightning–USB-C 충전 케이블로 연결되는 것으로 가정하지 마세요. 꽂을 기기에 맞는 USB 데이터/호스트 연결을 사용합니다.
 
 공식 명령 안내: [Espressif esptool](https://docs.espressif.com/projects/esptool/en/latest/esp32s3/esptool/basic-commands.html). 직접 빌드할 때는 [펌웨어 소스와 빌드 안내](firmware/README.md)를 참고하세요.
