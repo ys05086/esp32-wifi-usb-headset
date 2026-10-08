@@ -15,14 +15,14 @@ CONFIG = Path(sys.executable if getattr(sys, 'frozen', False) else __file__).par
 class App:
     def __init__(self, root):
         self.root, self.client = root, None
-        root.title('ESP32 Call Bridge'); root.geometry('700x760'); root.minsize(660, 740)
+        root.title('ESP32 Audio Bridge'); root.geometry('700x760'); root.minsize(660, 740)
         root.configure(bg='#f5f1fa')
         style=ttk.Style(); style.theme_use('clam')
         style.configure('.',font=('맑은 고딕',10),background='#f5f1fa',foreground='#393247')
         style.configure('TButton',padding=10,background='#decdf2')
         style.configure('TEntry',padding=8); style.configure('TCombobox',padding=7)
         frame=ttk.Frame(root,padding=24); frame.pack(fill='both',expand=True)
-        ttk.Label(frame,text='ESP32 Call Bridge',font=('맑은 고딕',23,'bold')).pack(anchor='w')
+        ttk.Label(frame,text='ESP32 Audio Bridge',font=('맑은 고딕',23,'bold')).pack(anchor='w')
         ttk.Label(frame,text='USB로 꽂은 기기의 소리를 Wi-Fi로 PC에서 듣고, PC 마이크를 그 기기에',padding=(0,6,0,18)).pack(anchor='w')
         self.host=tk.StringVar(value='192.168.0.14')
         try: saved=json.loads(CONFIG.read_text(encoding='utf-8-sig')); self.host.set(saved.get('host',self.host.get()))

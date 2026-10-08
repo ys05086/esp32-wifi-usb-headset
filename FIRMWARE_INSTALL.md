@@ -6,7 +6,7 @@
 
 - **COM → PC**: 펌웨어 설치·로그용 USB 직렬 포트.
 - **USB / OTG → 소리를 들을 기기**: 설치 후 오디오용 포트.
-- 데이터 전송이 되는 USB 케이블을 사용합니다. 설치할 때는 통화를 끝내고 보드의 USB/OTG 쪽은 분리합니다.
+- 데이터 전송이 되는 USB 케이블을 사용합니다. 설치할 때는 보드의 USB/OTG 쪽을 기기에서 분리합니다.
 - [Firmware Actions](https://github.com/ys05086/esp32-wifi-usb-headset/actions/workflows/firmware.yml)의 성공한 실행에서 `esp32-wifi-usb-headset-firmware` artifact를 내려받아 압축을 풉니다. Actions artifact를 받으려면 GitHub 로그인이 필요합니다. PC 앱 ZIP에는 펌웨어가 들어 있지 않습니다.
 - 실행의 소스 커밋과 `source-commit.txt`를 확인합니다. 최신 빌드 성공만으로 음질 검증이 끝난 것은 아닙니다.
 

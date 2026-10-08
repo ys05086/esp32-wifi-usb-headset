@@ -257,7 +257,7 @@ static esp_err_t usb_mode_post(httpd_req_t *req) {
     while(got<req->content_len){int n=httpd_req_recv(req,mode+got,req->content_len-got);if(n<=0)return ESP_FAIL;got+=n;}
     if(strcmp(mode,"apple") && strcmp(mode,"standard") && strcmp(mode,"adaptive"))return httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"Unknown USB mode");
     if(usb_profile_save(!strcmp(mode,"adaptive")?VS_USB_ADAPTIVE:!strcmp(mode,"apple")?VS_USB_APPLE:VS_USB_STANDARD)!=ESP_OK)return httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"Could not save USB mode");
-    return httpd_resp_sendstr(req,"Saved. Unplug BOTH USB and COM cables, then reconnect USB to the call device. Wi-Fi settings are retained. Active usb_mode changes after reboot.");
+    return httpd_resp_sendstr(req,"Saved. Unplug BOTH USB and COM cables, then reconnect USB to the device. Wi-Fi settings are retained. Active usb_mode changes after reboot.");
 }
 static void event(void *arg,esp_event_base_t base,int32_t id,void *data) {
     (void)arg;

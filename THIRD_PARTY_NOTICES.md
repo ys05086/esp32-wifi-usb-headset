@@ -1,6 +1,6 @@
 # Third-party notices / 외부 소프트웨어 고지
 
-ESP32 Call Bridge includes software developed by other authors. Their
+ESP32 Audio Bridge includes software developed by other authors. Their
 copyrights and license terms remain with those authors. Original project
 code and documentation are licensed under the MIT License in `LICENSE`.
 That grant does not relicense third-party code, libraries, license texts,

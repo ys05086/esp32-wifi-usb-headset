@@ -17,7 +17,7 @@
 | PyAV 16.1.0 | BSD-3-Clause. FFmpeg 라이선스와 별개. |
 | 현재 로컬 PyAV의 FFmpeg DLL | avcodec/avformat/avutil/avfilter/swresample/swscale의 런타임 license 함수가 `LGPL version 3 or later`를 반환함. 아래 주의 참조. |
 
-2026-10-08의 로컬 Windows CPython 3.10 환경과 `dist/call-bridge` 배포물을 확인했습니다. **avcodec DLL의 PE import table에서 번들 x264/x265 DLL을 실제로 참조하는 것을 확인했습니다.** 따라서 FFmpeg가 반환한 LGPL 문자열만으로 전체 배포물의 조건을 판단하면 안 됩니다. 현재 ZIP을 MIT-only 또는 LGPL-only로 표시하지 않습니다. AAC 기능을 꺼도 포함된 라이브러리의 배포 조건은 없어지지 않습니다.
+2026-10-08의 로컬 Windows CPython 3.10 환경과 로컬 빌드 배포물을 확인했습니다. **avcodec DLL의 PE import table에서 번들 x264/x265 DLL을 실제로 참조하는 것을 확인했습니다.** 따라서 FFmpeg가 반환한 LGPL 문자열만으로 전체 배포물의 조건을 판단하면 안 됩니다. 현재 ZIP을 MIT-only 또는 LGPL-only로 표시하지 않습니다. AAC 기능을 꺼도 포함된 라이브러리의 배포 조건은 없어지지 않습니다.
 
 CI는 Python 3.11을 쓰므로 새 패키징 단계에서 고지 원문과 DLL 해시/버전 목록을 그 환경에서 다시 수집합니다. 저장소 `licenses/inventory.json`은 현재 로컬 빌드의 기록이며 모든 미래 빌드에 대한 선언이 아닙니다. 네이티브 참고 원문의 버전 대응이 확정되지 않은 경우 `reference-sources.json`에 표시했습니다.
 

@@ -5,12 +5,12 @@
 휴대폰, 태블릿, 다른 PC처럼 USB 헤드셋을 인식하는 기기라면 어디에든 꽂을 수 있습니다. 기기에서 나는 소리(영상·게임·음악·통화 등)를 케이블 없이 지금 쓰는 컴퓨터의 헤드폰으로 듣고, 컴퓨터 마이크로 그 기기에 말할 수 있습니다. 보드를 옮겨 꽂거나 기기마다 보드를 하나씩 두면, 여러 기기를 한 컴퓨터에서 번갈아 들을 수 있습니다.
 
 ```text
-PC 마이크   → ESP32 Call Bridge → Wi-Fi → ESP32 → USB 마이크  → 기기
-PC 헤드폰 ← ESP32 Call Bridge ← Wi-Fi ← ESP32 ← USB 스피커 ← 기기
+PC 마이크   → ESP32 Audio Bridge → Wi-Fi → ESP32 → USB 마이크  → 기기
+PC 헤드폰 ← ESP32 Audio Bridge ← Wi-Fi ← ESP32 ← USB 스피커 ← 기기
 ```
 
 - [`firmware/`](firmware/): ESP32-S3 펌웨어. USB Audio Class 2 헤드셋 + Wi-Fi UDP 오디오.
-- 저장소 루트: Windows 앱 **ESP32 Call Bridge**. 컴퓨터의 마이크·헤드폰과 보드를 잇습니다.
+- 저장소 루트: Windows 앱 **ESP32 Audio Bridge**. 컴퓨터의 마이크·헤드폰과 보드를 잇습니다.
 - [PROTOCOL.md](PROTOCOL.md): 보드와 주고받는 UDP 형식. 다른 프로그램도 이 형식으로 보내고 받으면 됩니다.
 
 현재 실험 버전입니다. 빌드와 시험은 통과했지만 기기 조합에 따라 USB 오디오가 가끔 끊길 수 있습니다.
@@ -25,7 +25,7 @@ PC 헤드폰 ← ESP32 Call Bridge ← Wi-Fi ← ESP32 ← USB 스피커 ← 기
 
 1. **펌웨어 설치:** [펌웨어 설치 안내](FIRMWARE_INSTALL.md)를 따라 Actions의 **Firmware** 실행에서 받은 파일을 보드의 COM 포트로 굽습니다. 처음 한 번만 하면 됩니다.
 2. **보드 Wi-Fi 설정:** 보드에 전원을 넣고 휴대폰이나 컴퓨터로 Wi-Fi **`ESP32-Headset`**(비밀번호 **`esp32headset`**)에 연결합니다. 브라우저에서 **http://192.168.4.1**을 열어 공유기 이름과 비밀번호를 저장하고, 페이지에 나타나는 **`router_ip`**를 적어 둡니다. 그다음 원래 Wi-Fi로 돌아갑니다. 설정은 보드에 저장되어 다음부터는 이 단계가 필요 없습니다.
-3. **PC 앱 받기:** Actions의 **ESP32 Call Bridge Windows** 실행에서 `ESP32-Call-Bridge-Windows` ZIP을 받아 압축을 풀고 `ESP32CallBridge.exe`를 실행합니다. `_internal` 폴더도 함께 있어야 하며, Python 설치는 필요 없습니다.
+3. **PC 앱 받기:** Actions의 **ESP32 Audio Bridge Windows** 실행에서 `ESP32-Audio-Bridge-Windows` ZIP을 받아 압축을 풀고 `ESP32AudioBridge.exe`를 실행합니다. `_internal` 폴더도 함께 있어야 하며, Python 설치는 필요 없습니다.
 4. **기기에 꽂기:** 보드의 **USB** 포트를 소리를 들을 기기에 연결합니다. 기기에는 USB 오디오 장치 **`ESP32 Wi-Fi Headset`**이 생깁니다. 휴대폰은 보통 꽂으면 바로 바뀌고, Windows PC에서는 소리 설정에서 `스피커(usb uac)` / `마이크(usb uac)`를 고릅니다.
 5. **컴퓨터에서 연결:** PC 앱의 **ESP32 주소**에 적어 둔 `router_ip`를 넣습니다. **보낼 소리**에서 컴퓨터 마이크(또는 오디오 인터페이스·가상 케이블)를, **기기 소리**에서 컴퓨터 헤드폰을 고르고 **연결 시작**을 누릅니다.
 6. **듣기:** 이제 기기에서 나는 소리가 컴퓨터 헤드폰으로 들리고, 컴퓨터 마이크 소리가 기기의 마이크로 들어갑니다. 기기를 바꿀 때는 보드를 옮겨 꽂거나, 다른 보드의 주소로 바꿔 연결합니다.
@@ -48,7 +48,7 @@ PC 헤드폰 ← ESP32 Call Bridge ← Wi-Fi ← ESP32 ← USB 스피커 ← 기
 
 이 저장소에서 직접 작성한 코드와 문서는 [MIT License](LICENSE)로 제공합니다(펌웨어는 [firmware/LICENSE](firmware/LICENSE)). 외부 소프트웨어와 원문 고지는 각자의 라이선스를 유지하며 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), `licenses/`, [LICENSING.md](LICENSING.md)를 참고하세요. 전체 바이너리 배포 조건 검토는 별도로 진행 중입니다.
 
-## ESP32 Call Bridge 자세히
+## ESP32 Audio Bridge 자세히
 
 **보낼 소리** 목록에는 WASAPI 장치가 위쪽에 표시되며, 다른 드라이버 방식으로만 보이는 가상 케이블도 고를 수 있습니다. 이름 뒤의 WASAPI/MME/DirectSound/WDM-KS는 장치 접근 방식입니다. 이전 버전 설정은 기존 실행 폴더의 `settings.json`을 새 실행 폴더로 복사하면 이어서 사용할 수 있습니다.
 
@@ -85,7 +85,7 @@ python -m pip install -r requirements.txt
 python -m unittest test_protocol.py
 python app.py
 python -m pip install pyinstaller==6.22.3
-python -m PyInstaller --noconfirm --windowed --onedir --name ESP32CallBridge app.py
+python -m PyInstaller --noconfirm --windowed --onedir --name ESP32AudioBridge app.py
 ```
 
 `app.py --self-test REPORT.json`은 숨겨진 창을 만들고 오디오 장치 열거 결과를 저장한 뒤 종료합니다. 녹음/재생은 시작하지 않습니다.
@@ -94,10 +94,10 @@ python -m PyInstaller --noconfirm --windowed --onedir --name ESP32CallBridge app
 ## 검증 범위
 
 패킷 유효성, 세션 분리, 시퀀스 손실/재정렬, 버퍼 만료는 단위 검사합니다.
-가상 시간 30분 동안 주기적으로 최대 60 ms 늦는 패킷을 넣는 회귀 검사도 포함합니다. 실제 Wi-Fi/USB 장치나 장시간 통화를 검증한 결과는 아닙니다.
+가상 시간 30분 동안 주기적으로 최대 60 ms 늦는 패킷을 넣는 회귀 검사도 포함합니다. 실제 Wi-Fi/USB 장치나 장시간 사용을 검증한 결과는 아닙니다.
 ESP32 펌웨어와 실물 검사 스크립트는 [firmware/](firmware/)에 있습니다.
 
 이 저장소는 PC 앱과 ESP32 펌웨어를 함께 담습니다.
-GitHub Actions의 **ESP32 Call Bridge Windows**에서 실행 ZIP을 받을 수 있습니다.
+GitHub Actions의 **ESP32 Audio Bridge Windows**에서 실행 ZIP을 받을 수 있습니다.
 
 Adaptive 실험 펌웨어의 활성 모드도 `Adaptive · 피드백 없음 (실험)`으로 표시합니다. 선택은 보드 웹페이지에서 하며 재부팅 후 적용됩니다. 이 클라이언트 업데이트는 오디오 송수신 처리를 변경하지 않습니다.
