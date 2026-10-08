@@ -211,7 +211,8 @@ static esp_err_t status_get(httpd_req_t *req) {
     cJSON *usb=cJSON_AddObjectToObject(root,"usb");
     if(!usb){cJSON_Delete(root);return httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"Diagnostic allocation failed");}
     vs_usb_stats_t stats=vs_usb_diag_snapshot();
-    cJSON_AddNumberToObject(usb,"version",4);
+    cJSON_AddNumberToObject(usb,"version",5);
+    cJSON_AddNumberToObject(usb,"uptime_ms",(double)(uint32_t)(esp_timer_get_time()/1000));
     cJSON_AddNumberToObject(usb,"mic_prefill_attempts",stats.mic_prefill_attempts);
     cJSON_AddNumberToObject(usb,"mic_prefill_recovered",stats.mic_prefill_recovered);
     cJSON_AddBoolToObject(usb,"mic_active",stats.mic_active);
@@ -226,7 +227,24 @@ static esp_err_t status_get(httpd_req_t *req) {
         cJSON_AddNumberToObject(ep,"failed",stats.ep[i].failed);
         cJSON_AddNumberToObject(ep,"retries",stats.ep[i].retries);
         cJSON_AddNumberToObject(ep,"zero",stats.ep[i].zero);
+        cJSON_AddNumberToObject(ep,"short",stats.ep[i].partial);
         cJSON_AddNumberToObject(ep,"bytes",stats.ep[i].bytes);
+    }
+    // the last USB anomalies, oldest first, timed by uptime_ms: empty/short microphone packets, failures, retries
+    static const char *kinds[]={"","empty","short","failed","retry"};
+    cJSON_AddNumberToObject(usb,"event_count",stats.event_count);
+    cJSON *events=cJSON_AddArrayToObject(usb,"events");
+    if(!events){cJSON_Delete(root);return httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"Diagnostic allocation failed");}
+    unsigned kept=stats.event_count<VS_USB_EVENTS?stats.event_count:VS_USB_EVENTS;
+    for(unsigned i=0;i<kept;i++){
+        const vs_usb_event_t *e=&stats.events[(stats.event_count-kept+i)%VS_USB_EVENTS];
+        cJSON *item=cJSON_CreateObject();
+        if(!item){cJSON_Delete(root);return httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"Diagnostic allocation failed");}
+        cJSON_AddNumberToObject(item,"at_ms",e->at_ms);
+        cJSON_AddStringToObject(item,"kind",e->kind<5?kinds[e->kind]:"?");
+        cJSON_AddStringToObject(item,"endpoint",e->endpoint<3?names[e->endpoint]:"?");
+        cJSON_AddNumberToObject(item,"bytes",e->bytes);
+        cJSON_AddItemToArray(events,item);
     }
     if(!mic_trace_json(usb)){cJSON_Delete(root);return httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"Trace allocation failed");}
     char *body=cJSON_PrintUnformatted(root);cJSON_Delete(root);

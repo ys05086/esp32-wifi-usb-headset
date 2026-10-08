@@ -2,11 +2,22 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-typedef struct { uint32_t packets, failed, zero, bytes, retries; } vs_usb_endpoint_stats_t;
+// 47 frames of mono PCM16: TinyUSB's smallest regular microphone packet at 48 kHz. A successful packet
+// with fewer bytes (but not none) counts as short.
+#define VS_MIC_MIN_PACKET_BYTES 94
+// The last USB anomalies with the board's uptime, to line them up with a recording made through the board
+// (the status page reports uptime_ms alongside).
+#define VS_USB_EVENTS 32
+enum { VS_USB_EVENT_EMPTY = 1, VS_USB_EVENT_SHORT, VS_USB_EVENT_FAILED, VS_USB_EVENT_RETRY };
+typedef struct { uint32_t at_ms; uint16_t bytes; uint8_t kind, endpoint; } vs_usb_event_t;
+
+typedef struct { uint32_t packets, failed, zero, partial, bytes, retries; } vs_usb_endpoint_stats_t;
 typedef struct {
     vs_usb_endpoint_stats_t ep[3]; // microphone, speaker, feedback
     uint32_t feedback_value, feedback_bytes;
     uint32_t mic_prefill_attempts, mic_prefill_recovered;
+    uint32_t event_count;          // every event so far; the ring keeps the last VS_USB_EVENTS
+    vs_usb_event_t events[VS_USB_EVENTS];
     bool mic_active, speaker_active;
 } vs_usb_stats_t;
 void vs_usb_diag_xfer(unsigned kind, unsigned result, unsigned bytes);
