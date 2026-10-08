@@ -31,6 +31,7 @@ jobs:
         shell: pwsh
         run: |
           Copy-Item README.md dist/ESP32AudioBridge/README.md
+          Copy-Item README.ko.md dist/ESP32AudioBridge/README.ko.md
           Copy-Item LICENSE dist/ESP32AudioBridge/LICENSE
           Copy-Item FIRMWARE_INSTALL.md dist/ESP32AudioBridge/FIRMWARE_INSTALL.md
           Copy-Item LICENSING.md dist/ESP32AudioBridge/LICENSING.md
