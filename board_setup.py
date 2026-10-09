@@ -229,9 +229,10 @@ class SetupWindow:
             self.mode_note.set('소리가 한쪽만 나거나 안 나면 바꿔 보세요. 저장한 뒤 보드의 USB와 COM 케이블을 모두 뺐다 꽂으면 적용돼요.')
         board = s.get('firmware', '?') if s else '확인 안 됨'
         if self.bundle:
-            self.versions.set(f'설치할 펌웨어: {self.bundle.version}  ({self.bundle.folder})\n지금 보드: {board}')
+            where = '이 프로그램에 든 것' if self.bundle.folder == firmware_bundle.default_folder() else self.bundle.folder.name
+            self.versions.set(f'설치할 펌웨어: {self.bundle.version} ({where}) · 지금 보드: {board}')
         else:
-            self.versions.set(f'설치할 펌웨어: 없음 · {self.bundle_error}\n지금 보드: {board}')
+            self.versions.set(f'설치할 펌웨어: 없음 · {self.bundle_error} · 지금 보드: {board}')
         ready = not self.busy and bool(s)
         for button in (self.copy_button, self.new_button, self.wifi_button, self.forget_button, self.mode_button):
             button.configure(state='normal' if ready else 'disabled')

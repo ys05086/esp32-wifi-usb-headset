@@ -57,6 +57,8 @@ class BoardLink:
                     raise BoardError(line[5:])
                 if line:
                     self.log = (self.log + [line])[-20:]
+        # Firmware without setup commands took the 't' in the line as its probe-tone key: stop that tone.
+        self.port.write(b's')
         raise BoardError('보드가 답하지 않아요')
 
     def get(self):

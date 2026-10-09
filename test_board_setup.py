@@ -285,9 +285,11 @@ class LinkTests(unittest.TestCase):
         link = BoardLink(board, clock=Clock())
         with self.assertRaisesRegex(BoardError, 'unknown command'):
             link.command('nope')
-        board.write = lambda data: len(data)                         # old firmware: no answer
+        sent = []
+        board.write = lambda data: sent.append(data) or len(data)   # old firmware: no answer
         with self.assertRaises(BoardError):
             link.get()
+        self.assertEqual(sent[-1], b's')                              # its probe tone, started by 't', is stopped
 
 
 if __name__ == '__main__':
