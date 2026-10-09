@@ -26,14 +26,14 @@ def open_port(name, baud=115200):
 
 
 def list_ports():
-    """[(device, label)], the likely boards first."""
+    """[(device, label, known)], the likely boards first; known: a USB-serial chip ESP32 boards use."""
     from serial.tools import list_ports as lp
     found = []
     for p in lp.comports():
         chip = KNOWN_VIDS.get(p.vid)
         label = f'{p.device} · {chip or p.description}'
         found.append((chip is None, p.device, label))
-    return [(device, label) for _, device, label in sorted(found)]
+    return [(device, label, not unknown) for unknown, device, label in sorted(found)]
 
 
 class BoardLink:

@@ -181,14 +181,17 @@ class SetupWindow:
         except Exception as error:
             self.status.set(f'포트 목록을 못 읽었어요: {error}')
             return
-        self.ports = {label: device for device, label in found}
+        self.ports = {label: device for device, label, _ in found}
+        known = {label for _, label, chip in found if chip}
         self.port['values'] = list(self.ports)
         if self.port.get() not in self.ports:
             self.port.set(next(iter(self.ports), ''))
         if not found:
             self.status.set('COM 포트가 없어요. 보드의 COM 쪽 단자를 데이터 케이블로 연결하세요.')
-        else:
+        elif self.port.get() in known:
             self.read()
+        else:   # an unknown serial device: send it nothing until asked
+            self.status.set('보드용 USB-시리얼 칩이 안 보여요. 보드의 COM 단자를 연결하고 다시 찾기를 누르거나, 포트를 골라 읽기를 누르세요.')
 
     def read(self, quiet=False):
         def done(state, error):
