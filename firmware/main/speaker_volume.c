@@ -24,7 +24,7 @@ int32_t speaker_volume_gain(const speaker_volume_t *v, unsigned side) {
     unsigned channel = 1 + (side ? 1 : 0);
     if (v->mute[0] || v->mute[channel]) return 0;
     if (v->volume[0] <= SPEAKER_VOLUME_MIN || v->volume[channel] <= SPEAKER_VOLUME_MIN) return 0;
-    int32_t total = (int32_t)v->volume[0] + v->volume[channel];
+    int32_t total = v->volume[0] < v->volume[channel] ? v->volume[0] : v->volume[channel];
     if (total >= 0) return SPEAKER_GAIN_UNITY;
     return (int32_t)lrintf(SPEAKER_GAIN_UNITY * powf(10.0f, (float)total / (256.0f * 20.0f)));
 }

@@ -17,12 +17,18 @@ int main(void) {
     assert(speaker_volume_set(&v, 0, -6 * 256));
     near(speaker_volume_gain(&v, 0), 32845);
     near(speaker_volume_gain(&v, 1), 32845);
-    // Master and channel volume add in dB: -6 - 14 = -20 dB on the left only.
-    assert(speaker_volume_set(&v, 1, -14 * 256));
+    // The lower of master and channel applies: -20 dB on the left only.
+    assert(speaker_volume_set(&v, 1, -20 * 256));
     near(speaker_volume_gain(&v, 0), 6554);
     near(speaker_volume_gain(&v, 1), 32845);
+    // As an iPhone sets it: the same value on all three channels applies once, not twice.
+    speaker_volume_t phone;
+    speaker_volume_init(&phone);
+    for (unsigned c = 0; c < SPEAKER_VOLUME_CHANNELS; c++) assert(speaker_volume_set(&phone, c, -5339));   // -20.86 dB
+    near(speaker_volume_gain(&phone, 0), 5940);
+    near(speaker_volume_gain(&phone, 1), 5940);
     assert(v.changes == 2);
-    assert(speaker_volume_set(&v, 1, -14 * 256) && v.changes == 2);   // same value: no change counted
+    assert(speaker_volume_set(&v, 1, -20 * 256) && v.changes == 2);   // same value: no change counted
 
     // The bottom of the range is silence, on the master or a channel.
     assert(speaker_volume_set(&v, 1, 0) && speaker_volume_set(&v, 0, SPEAKER_VOLUME_MIN));
