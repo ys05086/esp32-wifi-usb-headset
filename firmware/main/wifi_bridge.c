@@ -383,6 +383,8 @@ void wifi_bridge_init(void) {
     ESP_ERROR_CHECK(httpd_register_uri_handler(server,&root));ESP_ERROR_CHECK(httpd_register_uri_handler(server,&status));ESP_ERROR_CHECK(httpd_register_uri_handler(server,&setup));
     httpd_uri_t usb_mode={.uri="/usb-mode",.method=HTTP_POST,.handler=usb_mode_post};
     ESP_ERROR_CHECK(httpd_register_uri_handler(server,&usb_mode));
-    ESP_ERROR_CHECK(xTaskCreatePinnedToCore(udp_task,"wifi_pcm",8192,NULL,4,NULL,0)==pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
+    // Audio in and out: above the web server (5), below lwIP (18) and Wi-Fi (23). At 4, pinned to core 0, it
+    // lost ~1.8 packets/s from the PC to lwIP's full receive mailbox.
+    ESP_ERROR_CHECK(xTaskCreatePinnedToCore(udp_task,"wifi_pcm",8192,NULL,10,NULL,0)==pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
     ESP_LOGI(TAG,"READY: board Wi-Fi %s (password: setup program, or @get on COM) ; setup http://192.168.4.1 ; PCM UDP 49152",board_ap_ssid());
 }
