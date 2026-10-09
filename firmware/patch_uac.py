@@ -149,6 +149,20 @@ MIC_PACING_PATCHES = [
 
 
 
+# Speaker diagnostics, applied last and restored first: what the USB ISR hands over (zero chunks, a full
+# handoff queue) and how often a 10 ms packet gap restarts the stream.
+SPEAKER_DIAG_PATCHES = [
+    ('            xQueueSendFromISR(vs_speaker_queue, &block, &woken);',
+     '            extern void vs_usb_diag_speaker_chunk(const uint8_t *data, unsigned size, bool queued);\n'
+     '            vs_usb_diag_speaker_chunk(block.data, block.size, xQueueSendFromISR(vs_speaker_queue, &block, &woken) == pdTRUE);'),
+    ('            xQueueSend(vs_speaker_queue, &block, 0);',
+     '            extern void vs_usb_diag_speaker_chunk(const uint8_t *data, unsigned size, bool queued);\n'
+     '            vs_usb_diag_speaker_chunk(block.data, block.size, xQueueSend(vs_speaker_queue, &block, 0) == pdTRUE);'),
+    ('        new_play = true;\n        tud_audio_n_clear_ep_out_ff(func_id);',
+     '        new_play = true;\n        extern void vs_usb_diag_speaker_restart(void);\n        vs_usb_diag_speaker_restart();\n'
+     '        tud_audio_n_clear_ep_out_ff(func_id);'),
+]
+
 # Added after pacing patches; restore these FIRST so pinned source hashes remain valid.
 TRACE_PATCHES = [
     ('#include "usb_mic_refill.h"', '#include "usb_mic_refill.h"\n#include "usb_mic_trace.h"'),
@@ -170,6 +184,8 @@ def patch(root):
         if relative == 'tusb/usb_descriptors.c':
             original = original.replace(DESCRIPTOR_PREVIOUS, DESCRIPTOR_OLD).replace(DESCRIPTOR_INCLUDE_NEW, DESCRIPTOR_INCLUDE_OLD)
         if relative == 'usb_device_uac.c':
+            for diag_old, diag_new in reversed(SPEAKER_DIAG_PATCHES):
+                original = original.replace(diag_new, diag_old)
             for trace_old, trace_new in reversed(TRACE_PATCHES):
                 original = original.replace(trace_new, trace_old)
             for extra_old, extra_new in SPEAKER_PATCHES + MIC_PACING_PATCHES:
@@ -183,7 +199,7 @@ def patch(root):
             raise RuntimeError(f'Ambiguous patch anchor: {path}')
         content = restored.replace(old, new)
         if relative == 'usb_device_uac.c':
-            for extra_old, extra_new in SPEAKER_PATCHES + MIC_PACING_PATCHES + TRACE_PATCHES:
+            for extra_old, extra_new in SPEAKER_PATCHES + MIC_PACING_PATCHES + TRACE_PATCHES + SPEAKER_DIAG_PATCHES:
                 if content.count(extra_old) != 1:
                     raise RuntimeError('Unexpected speaker handoff source')
                 content = content.replace(extra_old, extra_new)

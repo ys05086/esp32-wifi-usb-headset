@@ -37,6 +37,9 @@ static QueueHandle_t return_queue;
 static struct sockaddr_in owner;
 static bool owner_valid, duplex;
 static uint32_t generation, return_sent, return_dropped;
+// Device sound lost on the board without a count before: frames of half-built blocks thrown away (a 50 ms
+// stall or a new session), and finished blocks not sent: too old (over 80 ms) or no longer for this phone.
+static uint32_t return_partial_frames, return_stale, return_invalid;
 static const char page[] =
 "<!doctype html><html><meta name='viewport' content='width=device-width,initial-scale=1'><meta charset='utf-8'>"
 "<title>ESP32 Wi-Fi Headset</title><style>body{background:#f5f1fa;color:#343044;font:16px system-ui;max-width:440px;margin:40px auto;padding:22px}"
@@ -77,7 +80,10 @@ void wifi_bridge_speaker(const uint8_t *stereo, size_t bytes) {
     uint32_t session = pcm.session, epoch = generation;
     portEXIT_CRITICAL(&pcm_lock);
     if (!enabled) { frames = 0; return; }
-    if (block.generation != epoch || (frames && now-block.created_ms > 50)) frames = 0;
+    if (block.generation != epoch || (frames && now-block.created_ms > 50)) {
+        if (frames) { portENTER_CRITICAL(&pcm_lock); return_partial_frames += frames; portEXIT_CRITICAL(&pcm_lock); }
+        frames = 0;
+    }
     block.session = session; block.generation = epoch;
     for (size_t i=0; i+3<bytes; i+=4) {
         if (!frames) block.created_ms = now;
@@ -140,10 +146,12 @@ static void udp_task(void *arg) {
             struct sockaddr_in target;
             int64_t now=esp_timer_get_time()/1000;
             portENTER_CRITICAL(&pcm_lock);
-            bool valid=owner_valid && duplex && pcm.active && now-pcm.last_ms<=300 && block.session==pcm.session && block.generation==generation && now-block.created_ms<=80;
+            bool listening=owner_valid && duplex && pcm.active && now-pcm.last_ms<=300 && block.session==pcm.session && block.generation==generation;
+            bool fresh=now-block.created_ms<=80;
+            if(!listening) return_invalid++; else if(!fresh) return_stale++;
             target=owner;
             portEXIT_CRITICAL(&pcm_lock);
-            if(!valid) continue;
+            if(!listening || !fresh) continue;
             memcpy(back,"VSR1",4);
             memcpy(back+4,&block.session,4);memcpy(back+8,&return_sequence,4);return_sequence++;
             back[12]=0xe0;back[13]=1;back[14]=back[15]=0;memcpy(back+16,block.data,960);
@@ -210,10 +218,15 @@ static esp_err_t status_get(httpd_req_t *req) {
     cJSON_AddNumberToObject(root,"input_level_step",adjust);
     // backlog skipped when the USB host (re)started reading, before anything played
     cJSON_AddNumberToObject(root,"input_start_flushed_frames",flushed);
+    uint32_t partial,stale,invalid;
+    portENTER_CRITICAL(&pcm_lock);partial=return_partial_frames;stale=return_stale;invalid=return_invalid;portEXIT_CRITICAL(&pcm_lock);
+    cJSON_AddNumberToObject(root,"return_partial_frames",partial);
+    cJSON_AddNumberToObject(root,"return_stale",stale);
+    cJSON_AddNumberToObject(root,"return_invalid",invalid);
     cJSON *usb=cJSON_AddObjectToObject(root,"usb");
     if(!usb){cJSON_Delete(root);return httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"Diagnostic allocation failed");}
     vs_usb_stats_t stats=vs_usb_diag_snapshot();
-    cJSON_AddNumberToObject(usb,"version",5);
+    cJSON_AddNumberToObject(usb,"version",6);
     cJSON_AddNumberToObject(usb,"uptime_ms",(double)(uint32_t)(esp_timer_get_time()/1000));
     cJSON_AddNumberToObject(usb,"mic_prefill_attempts",stats.mic_prefill_attempts);
     cJSON_AddNumberToObject(usb,"mic_prefill_recovered",stats.mic_prefill_recovered);
@@ -221,6 +234,11 @@ static esp_err_t status_get(httpd_req_t *req) {
     cJSON_AddBoolToObject(usb,"speaker_active",stats.speaker_active);
     cJSON_AddNumberToObject(usb,"feedback_value_16_16",stats.feedback_value);
     cJSON_AddNumberToObject(usb,"feedback_packet_bytes",stats.feedback_bytes);
+    cJSON_AddNumberToObject(usb,"speaker_chunks",stats.spk_chunks);
+    cJSON_AddNumberToObject(usb,"speaker_zero_chunks",stats.spk_zero_chunks);
+    cJSON_AddNumberToObject(usb,"speaker_zero_after_sound",stats.spk_zero_after_sound);
+    cJSON_AddNumberToObject(usb,"speaker_queue_full",stats.spk_queue_full);
+    cJSON_AddNumberToObject(usb,"speaker_restarts",stats.spk_restarts);
     const char *names[]={"mic","speaker","feedback"};
     for(unsigned i=0;i<3;i++){
         cJSON *ep=cJSON_AddObjectToObject(usb,names[i]);

@@ -16,6 +16,10 @@ typedef struct {
     vs_usb_endpoint_stats_t ep[3]; // microphone, speaker, feedback
     uint32_t feedback_value, feedback_bytes;
     uint32_t mic_prefill_attempts, mic_prefill_recovered;
+    // Speaker data as the USB ISR hands it to the speaker task (normally one 1 ms chunk per packet):
+    // chunks, all-zero chunks, all-zero chunks right after sound, chunks lost to a full handoff queue,
+    // and stream restarts (a 10 ms gap between packets clears the FIFO and waits for 5 ms of data).
+    uint32_t spk_chunks, spk_zero_chunks, spk_zero_after_sound, spk_queue_full, spk_restarts;
     uint32_t event_count;          // every event so far; the ring keeps the last VS_USB_EVENTS
     vs_usb_event_t events[VS_USB_EVENTS];
     bool mic_active, speaker_active;
@@ -25,4 +29,6 @@ void vs_usb_diag_state(bool mic, bool speaker);
 void vs_usb_diag_feedback(unsigned value, unsigned bytes);
 void vs_usb_diag_retry(unsigned ep_addr);
 void vs_usb_diag_mic_prefill(bool recovered);
+void vs_usb_diag_speaker_chunk(const uint8_t *data, unsigned size, bool queued);   // USB ISR
+void vs_usb_diag_speaker_restart(void);                                              // USB ISR
 vs_usb_stats_t vs_usb_diag_snapshot(void);

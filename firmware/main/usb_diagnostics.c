@@ -21,6 +21,24 @@ void vs_usb_diag_mic_prefill(bool recovered) {
     portEXIT_CRITICAL(&lock);
 }
 
+void vs_usb_diag_speaker_chunk(const uint8_t *data, unsigned size, bool queued) {
+    static bool sound;   // the previous chunk had sound; only the USB ISR runs this
+    bool zero = true;
+    for (unsigned i = 0; i < size; i++) if (data[i]) { zero = false; break; }
+    portENTER_CRITICAL(&lock);
+    stats.spk_chunks++;
+    if (zero) { stats.spk_zero_chunks++; if (sound) stats.spk_zero_after_sound++; }
+    if (!queued) stats.spk_queue_full++;
+    portEXIT_CRITICAL(&lock);
+    sound = !zero;
+}
+
+void vs_usb_diag_speaker_restart(void) {
+    portENTER_CRITICAL(&lock);
+    stats.spk_restarts++;
+    portEXIT_CRITICAL(&lock);
+}
+
 void vs_usb_diag_retry(unsigned ep_addr) {
     // Board descriptors: 0x82 microphone, 0x81 speaker feedback.
     if (ep_addr != 0x82 && ep_addr != 0x81) return;
