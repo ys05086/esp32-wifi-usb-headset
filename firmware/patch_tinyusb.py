@@ -46,9 +46,35 @@ DWC_RETRY_NEW = '''      if (xfer->iso_retry > 0) {
         xfer->iso_retry--;'''
 
 
+# Frame-level diagnostics (counters only), applied last and restored first: the frame each isochronous
+# endpoint is armed in (an endpoint armed after the next SOF misses that frame) and the frame each OUT
+# packet arrived in.
+DWC_DIAG_PATCHES = [
+    ("""      const uint16_t byte_count = grxstsp.byte_count;
+      xfer_ctl_t* xfer = XFER_CTL_BASE(epnum, TUSB_DIR_OUT);
+""", """      const uint16_t byte_count = grxstsp.byte_count;
+      xfer_ctl_t* xfer = XFER_CTL_BASE(epnum, TUSB_DIR_OUT);
+      if (epnum) {
+        extern void vs_usb_diag_out_rx(unsigned frame4);
+        vs_usb_diag_out_rx(grxstsp.frame_number);
+      }
+"""),
+    ("""    const uint32_t odd_now = dsts.frame_number & 1u;
+    if (odd_now) {
+      depctl.set_data0_iso_even = 1;""", """    const uint32_t odd_now = dsts.frame_number & 1u;
+    extern void vs_usb_diag_iso_arm(unsigned epnum, unsigned dir, unsigned frame);
+    vs_usb_diag_iso_arm(epnum, dir, dsts.frame_number);
+    if (odd_now) {
+      depctl.set_data0_iso_even = 1;"""),
+]
+
+
 def patch_dwc(root):
     path = root / 'src/portable/synopsys/dwc2/dcd_dwc2.c'
-    original = path.read_text(encoding='utf-8').replace(DWC_NEW, DWC_OLD)
+    original = path.read_text(encoding='utf-8')
+    for diag_old, diag_new in reversed(DWC_DIAG_PATCHES):
+        original = original.replace(diag_new, diag_old)
+    original = original.replace(DWC_NEW, DWC_OLD)
     original = original.replace(DWC_RETRY_NEW, DWC_RETRY_OLD)
     if DWC_IN_IRQ + DWC_RX_ANCHOR in original:
         original = original.replace(DWC_IN_IRQ + DWC_RX_ANCHOR, DWC_RX_ANCHOR)
@@ -62,6 +88,10 @@ def patch_dwc(root):
     content = original.replace(DWC_OLD, DWC_NEW).replace(DWC_IN_IRQ, '')
     content = content.replace(DWC_RX_ANCHOR, DWC_IN_IRQ + DWC_RX_ANCHOR)
     content = content.replace(DWC_RETRY_OLD, DWC_RETRY_NEW)
+    for diag_old, diag_new in DWC_DIAG_PATCHES:
+        if content.count(diag_old) != 1:
+            raise RuntimeError('Ambiguous DWC2 diagnostic patch')
+        content = content.replace(diag_old, diag_new)
     path.write_text(content, encoding='utf-8', newline='\n')
 
 PATCHES = [

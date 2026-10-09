@@ -24,6 +24,14 @@ typedef struct {
     uint32_t spk_backlog_max, spk_backlog_over8;
     // microphone packets by size, 47 / 48 / 49 frames / other: the host may read the board's clock from these
     uint32_t mic_frames[4];
+    // Isochronous timing. An endpoint is armed for the frame after the one it is armed in, so consecutive arms
+    // of a streaming endpoint are one frame apart; a bigger gap is a frame with nothing armed: lost. arm_gaps
+    // counts those frames per endpoint (speaker OUT, microphone IN, feedback IN). OUT packets also report the
+    // frame they arrived in: out_missed counts frames between packets, out_late_arms re-arms that happened
+    // in a later frame than the packet they follow (after the next SOF), out_missed_after_late the frames
+    // lost right after such a late re-arm.
+    uint32_t arm_gaps[3], arm_gap_events[3];
+    uint32_t out_missed, out_late_arms, out_missed_after_late;
     uint32_t event_count;          // every event so far; the ring keeps the last VS_USB_EVENTS
     vs_usb_event_t events[VS_USB_EVENTS];
     bool mic_active, speaker_active;
@@ -36,4 +44,6 @@ void vs_usb_diag_mic_prefill(bool recovered);
 void vs_usb_diag_speaker_chunk(const uint8_t *data, unsigned size, bool queued);   // USB ISR
 void vs_usb_diag_speaker_restart(void);                                              // USB ISR
 void vs_usb_diag_speaker_backlog(unsigned waiting);                                  // speaker task
+void vs_usb_diag_out_rx(unsigned frame4);                                            // USB ISR
+void vs_usb_diag_iso_arm(unsigned epnum, unsigned dir, unsigned frame);              // USB ISR / task
 vs_usb_stats_t vs_usb_diag_snapshot(void);

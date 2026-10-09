@@ -230,7 +230,7 @@ static esp_err_t status_get(httpd_req_t *req) {
     cJSON *usb=cJSON_AddObjectToObject(root,"usb");
     if(!usb){cJSON_Delete(root);return httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"Diagnostic allocation failed");}
     vs_usb_stats_t stats=vs_usb_diag_snapshot();
-    cJSON_AddNumberToObject(usb,"version",8);
+    cJSON_AddNumberToObject(usb,"version",9);
     cJSON_AddNumberToObject(usb,"uptime_ms",(double)(uint32_t)(esp_timer_get_time()/1000));
     cJSON_AddNumberToObject(usb,"mic_prefill_attempts",stats.mic_prefill_attempts);
     cJSON_AddNumberToObject(usb,"mic_prefill_recovered",stats.mic_prefill_recovered);
@@ -245,6 +245,18 @@ static esp_err_t status_get(httpd_req_t *req) {
     cJSON_AddNumberToObject(usb,"speaker_restarts",stats.spk_restarts);
     cJSON_AddNumberToObject(usb,"speaker_backlog_max",stats.spk_backlog_max);
     cJSON_AddNumberToObject(usb,"speaker_backlog_over8",stats.spk_backlog_over8);
+    cJSON *iso=cJSON_AddObjectToObject(usb,"iso");
+    if(iso){
+        static const char *iso_names[]={"speaker","mic","feedback"};
+        cJSON *gaps=cJSON_AddObjectToObject(iso,"arm_gap_frames"),*events=cJSON_AddObjectToObject(iso,"arm_gap_events");
+        for(unsigned i=0;i<3;i++){
+            if(gaps)cJSON_AddNumberToObject(gaps,iso_names[i],stats.arm_gaps[i]);
+            if(events)cJSON_AddNumberToObject(events,iso_names[i],stats.arm_gap_events[i]);
+        }
+        cJSON_AddNumberToObject(iso,"out_missed",stats.out_missed);
+        cJSON_AddNumberToObject(iso,"out_late_arms",stats.out_late_arms);
+        cJSON_AddNumberToObject(iso,"out_missed_after_late",stats.out_missed_after_late);
+    }
     cJSON *sizes=cJSON_AddObjectToObject(usb,"mic_packet_frames");
     if(sizes){cJSON_AddNumberToObject(sizes,"47",stats.mic_frames[0]);cJSON_AddNumberToObject(sizes,"48",stats.mic_frames[1]);
               cJSON_AddNumberToObject(sizes,"49",stats.mic_frames[2]);cJSON_AddNumberToObject(sizes,"other",stats.mic_frames[3]);}

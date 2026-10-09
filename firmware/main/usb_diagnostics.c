@@ -46,6 +46,43 @@ void vs_usb_diag_speaker_backlog(unsigned waiting) {
     portEXIT_CRITICAL(&lock);
 }
 
+// Board endpoints: OUT 1 speaker; IN 2 microphone, IN 1 feedback.
+static int iso_index(unsigned epnum, unsigned dir) {
+    if (!dir) return epnum == 1 ? 0 : -1;
+    return epnum == 2 ? 1 : epnum == 1 ? 2 : -1;
+}
+
+static unsigned out_last_rx = 0x100;   // 4 LSBs of the frame of the last OUT packet; 0x100: none yet
+static bool out_late;                  // the re-arm after that packet ran in a later frame
+
+void vs_usb_diag_out_rx(unsigned frame4) {
+    portENTER_CRITICAL(&lock);
+    if (out_last_rx != 0x100) {
+        unsigned gap = (frame4 - out_last_rx) & 15u;
+        if (gap >= 2 && gap < 12) {      // a longer pause is the host stopping, not a lost packet
+            stats.out_missed += gap - 1;
+            if (out_late) stats.out_missed_after_late += gap - 1;
+        }
+    }
+    out_last_rx = frame4 & 15u;
+    out_late = false;
+    portEXIT_CRITICAL(&lock);
+}
+
+void vs_usb_diag_iso_arm(unsigned epnum, unsigned dir, unsigned frame) {
+    static unsigned last[3] = {0x10000, 0x10000, 0x10000};
+    int i = iso_index(epnum, dir);
+    if (i < 0) return;
+    portENTER_CRITICAL(&lock);
+    if (last[i] != 0x10000) {
+        unsigned gap = (frame - last[i]) & 0x3FFFu;
+        if (gap >= 2 && gap < 50) { stats.arm_gaps[i] += gap - 1; stats.arm_gap_events[i]++; }
+    }
+    last[i] = frame & 0x3FFFu;
+    if (i == 0 && out_last_rx != 0x100 && ((frame - out_last_rx) & 15u) >= 1) { stats.out_late_arms++; out_late = true; }
+    portEXIT_CRITICAL(&lock);
+}
+
 void vs_usb_diag_retry(unsigned ep_addr) {
     // Board descriptors: 0x82 microphone, 0x81 speaker feedback.
     if (ep_addr != 0x82 && ep_addr != 0x81) return;
