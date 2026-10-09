@@ -15,6 +15,12 @@ PC headphones ← ESP32 Audio Bridge ← Wi-Fi ← ESP32 ← USB speaker    ← 
 - Repository root: the Windows app **ESP32 Audio Bridge**, which connects your computer's microphone and headphones to the board, and **ESP32 Board Setup**, which installs the firmware and sets up the board over its COM cable.
 - [PROTOCOL.md](PROTOCOL.md): the UDP format the board speaks. Any other program can send and receive it too.
 
+| ESP32 Audio Bridge | ESP32 Board Setup |
+|---|---|
+| ![ESP32 Audio Bridge while connected](docs/images/audio-bridge.png) | ![ESP32 Board Setup after reading a board](docs/images/board-setup.png) |
+
+The address, audio devices, board name, password and router in these screens are examples.
+
 > **⚠️ This is an experimental project.** Wi-Fi and USB packet problems can still make the sound drop out, crackle or degrade now and then. How often depends on the device and the network. Do not rely on it yet for important calls, streams or recordings.
 
 The Windows programs and the install guide are currently in Korean; the labels below are given in Korean with a translation.
@@ -101,6 +107,8 @@ python -m PyInstaller --noconfirm --windowed --onedir --name ESP32BoardSetup --c
 The setup program installs firmware through the ESP32-S3's own ROM download mode (`esp_rom.py`): it resets the board into download mode with DTR/RTS, writes the bootloader, partition table and app (compressed, falling back to plain writes), checks each region by MD5 and resets into the new firmware. The settings partition in between is left alone unless you tick the reset option. It uploads no flasher stub. Settings use text commands on the same COM port (`@get`, `@set {json}`, `@new-password`, `@reboot`, `@help`), so a serial monitor works too.
 
 `app.py --self-test REPORT.json` creates a hidden window, saves the list of audio devices and exits, without recording or playing.
+`tools/screenshot_app.py` and `tools/screenshot_setup.py` redraw the screens above with example values (they need Pillow); they open no port and send nothing.
+
 `app.py --audio-self-test REPORT.json` briefly opens the saved devices on the real worker threads and checks sending against a local UDP test server. The output is silent; nothing is saved or sent to a board. On Windows the worker threads initialize COM before WASAPI and release it after the stream closes.
 
 ## What is tested

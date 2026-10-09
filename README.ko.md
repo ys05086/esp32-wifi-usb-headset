@@ -15,6 +15,12 @@ PC 헤드폰 ← ESP32 Audio Bridge ← Wi-Fi ← ESP32 ← USB 스피커 ← �
 - 저장소 루트: Windows 앱 **ESP32 Audio Bridge**. 컴퓨터의 마이크·헤드폰과 보드를 잇습니다.
 - [PROTOCOL.md](PROTOCOL.md): 보드와 주고받는 UDP 형식. 다른 프로그램도 이 형식으로 보내고 받으면 됩니다.
 
+| ESP32 Audio Bridge | ESP32 보드 설정 |
+|---|---|
+| ![연결 중인 ESP32 Audio Bridge](docs/images/audio-bridge.png) | ![보드를 읽은 ESP32 보드 설정](docs/images/board-setup.png) |
+
+화면의 주소, 오디오 장치, 보드 이름, 비밀번호, 공유기는 예시 값입니다.
+
 > **⚠️ 실험 중인 프로젝트입니다.** Wi-Fi·USB 패킷 문제로 중간중간 소리가 끊기거나, 지직거리거나, 음질이 깨지는 현상이 발생할 수 있습니다. 기기와 네트워크 환경에 따라 정도가 다릅니다. 중요한 통화·방송·녹음에는 아직 쓰지 마세요.
 
 ## 준비물
@@ -99,6 +105,8 @@ python -m PyInstaller --noconfirm --windowed --onedir --name ESP32BoardSetup --c
 보드 설정 프로그램은 ESP32-S3에 내장된 ROM 다운로드 모드로 펌웨어를 씁니다(`esp_rom.py`). DTR/RTS로 보드를 다운로드 모드로 재시작하고, 부트로더·파티션 표·앱을 압축해서 쓰고(안 되면 압축 없이), 영역마다 MD5로 확인한 뒤 새 펌웨어로 재시작합니다. 사이의 설정(NVS) 영역은 초기화를 고르지 않으면 건드리지 않습니다. 별도 플래셔 스텁은 올리지 않습니다. 설정은 같은 COM 포트의 텍스트 명령(`@get`, `@set {json}`, `@new-password`, `@reboot`, `@help`)을 쓰므로 시리얼 모니터로도 할 수 있습니다.
 
 `app.py --self-test REPORT.json`은 숨겨진 창을 만들고 오디오 장치 열거 결과를 저장한 뒤 종료합니다. 녹음/재생은 시작하지 않습니다.
+`tools/screenshot_app.py`와 `tools/screenshot_setup.py`는 위 화면을 예시 값으로 다시 그립니다(Pillow 필요). 포트를 열거나 아무것도 보내지 않습니다.
+
 `app.py --audio-self-test REPORT.json`은 저장된 입출력 장치를 실제 작업 스레드에서 짧게 열고, 로컬 UDP 테스트 서버로 송신을 검증합니다. 출력은 무음이며 음성 파일을 저장하거나 실제 보드로 전송하지 않습니다. Windows 작업 스레드는 WASAPI 시작 전에 COM을 초기화하고 스트림 종료 후 해제합니다.
 
 ## 검증 범위
