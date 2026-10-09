@@ -4,13 +4,13 @@ Run in the same Python environment used by PyInstaller. This is evidence
 collection, not a declaration of complete license compliance.
 """
 import argparse
-import ctypes
 import hashlib
 import importlib.metadata as metadata
 import json
 from pathlib import Path
 import platform
 import shutil
+import subprocess
 import sys
 
 
@@ -21,7 +21,7 @@ def digest(path):
 def collect(bundle, output):
     output.mkdir(parents=True, exist_ok=True)
     records = []
-    packages = ['numpy', 'sounddevice', 'soxr', 'av', 'cffi', 'pycparser']
+    packages = ['numpy', 'sounddevice', 'soxr', 'cffi', 'pycparser']
     # Optional modules observed in a PyInstaller build are also distributed code.
     for folder, package in [('PIL', 'Pillow'), ('yaml', 'PyYAML')]:
         if (bundle / '_internal' / folder).exists():
@@ -60,28 +60,25 @@ def collect(bundle, output):
                     'files': [{'file': target.relative_to(output).as_posix(),
                                'sha256': digest(target)}]})
 
-    runtime = []
-    # Inspect copies from this bundle, not unrelated FFmpeg executables on PATH.
-    dll_dir = bundle / '_internal' / 'av.libs'
-    if sys.platform == 'win32' and dll_dir.exists():
-        import os
-        import pefile  # Installed with the Windows PyInstaller build toolchain.
-        with os.add_dll_directory(str(dll_dir.resolve())):
-            for prefix in ('avcodec', 'avformat', 'avutil', 'avdevice', 'avfilter',
-                           'swresample', 'swscale'):
-                for dll in sorted(dll_dir.glob(prefix + '-*.dll')):
-                    lib = ctypes.CDLL(str(dll.resolve()))
-                    row = {'file': dll.relative_to(bundle).as_posix(),
-                           'sha256': digest(dll)}
-                    with pefile.PE(str(dll)) as pe:
-                        row['imports'] = [entry.dll.decode('ascii') for entry in
-                                          getattr(pe, 'DIRECTORY_ENTRY_IMPORT', [])]
-                    for suffix in ('license', 'configuration', 'version'):
-                        fn = getattr(lib, prefix + '_' + suffix)
-                        fn.restype = ctypes.c_uint if suffix == 'version' else ctypes.c_char_p
-                        value = fn()
-                        row[suffix] = value if suffix == 'version' else value.decode('utf-8')
-                    runtime.append(row)
+    # The AAC comparison runs the bundled minimal FFmpeg (tools/build_ffmpeg.sh), not a library in _internal.
+    ffmpeg = bundle / 'ffmpeg' / 'ffmpeg.exe'
+    if not ffmpeg.is_file():
+        raise RuntimeError('Bundled ffmpeg/ffmpeg.exe not found')
+    flags = subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
+    version = subprocess.run([str(ffmpeg), '-hide_banner', '-version'], capture_output=True, text=True,
+                             creationflags=flags, check=True).stdout
+    license_text = subprocess.run([str(ffmpeg), '-hide_banner', '-L'], capture_output=True, text=True,
+                                  creationflags=flags, check=True).stdout
+    configuration = next((line for line in version.splitlines() if line.startswith('configuration:')), '')
+    if '--enable-gpl' in configuration or '--enable-nonfree' in configuration or 'GNU Lesser General Public' not in license_text:
+        raise RuntimeError('Bundled ffmpeg is not an LGPL build')
+    sources = sorted((bundle / 'ffmpeg' / 'source').glob('ffmpeg-*.tar.xz'))
+    if not sources:
+        raise RuntimeError('FFmpeg source tarball missing next to the bundled ffmpeg')
+    runtime = {'file': ffmpeg.relative_to(bundle).as_posix(), 'sha256': digest(ffmpeg),
+               'version': version.splitlines()[0], 'configuration': configuration,
+               'license': 'LGPL version 2.1 or later',
+               'source': [{'file': x.relative_to(bundle).as_posix(), 'sha256': digest(x)} for x in sources]}
 
     binaries = []
     for path in sorted((bundle / '_internal').rglob('*')):
@@ -89,18 +86,20 @@ def collect(bundle, output):
             binaries.append({'file': path.relative_to(bundle).as_posix(),
                              'sha256': digest(path)})
     gpl_candidates = [x['file'] for x in binaries
-                      if Path(x['file']).name.lower().startswith(('libx264', 'libx265'))]
+                      if Path(x['file']).name.lower().startswith(('libx264', 'libx265', 'avcodec'))]
     report = {'scope': 'Installed package notices and actual bundled native binaries',
               'compliance_complete': False, 'packages': records,
-              'ffmpeg_runtime_self_report': runtime, 'native_binaries': binaries,
+              'ffmpeg': runtime, 'native_binaries': binaries,
               'gpl_components_present': gpl_candidates,
               'remaining': ['Resolve exact native-library source/build provenance and notices',
-                            'Provide corresponding sources and applicable relinking materials',
-                            'Review FFmpeg GPL dependencies even if DLL self-report says LGPL',
+                            'Provide corresponding sources for soxr (LGPL) and other bundled native libraries',
                             'Review ASIO SDK and Microsoft runtime redistribution notices']}
     (output / 'inventory.json').write_text(json.dumps(report, indent=2), encoding='utf-8')
     print(f'Collected {len(records)} package/runtime notice sets; '
-          f'inventoried {len(binaries)} native files; GPL candidates: {len(gpl_candidates)}')
+          f'inventoried {len(binaries)} native files; GPL candidates: {len(gpl_candidates)}; '
+          f'ffmpeg {runtime["version"]}')
+    if gpl_candidates:
+        raise RuntimeError(f'GPL libraries in the bundle: {gpl_candidates}')
 
 
 if __name__ == '__main__':

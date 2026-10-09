@@ -1,35 +1,5 @@
 [
   {
-    "file": "native-reference/FFmpeg-COPYING.GPLv2",
-    "source": "https://raw.githubusercontent.com/FFmpeg/FFmpeg/n8.0/COPYING.GPLv2",
-    "note": "FFmpeg 8.0 reference; exact wheel build commit remains unverified",
-    "sha256": "8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643"
-  },
-  {
-    "file": "native-reference/FFmpeg-COPYING.GPLv3",
-    "source": "https://raw.githubusercontent.com/FFmpeg/FFmpeg/n8.0/COPYING.GPLv3",
-    "note": "FFmpeg 8.0 reference; exact wheel build commit remains unverified",
-    "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
-  },
-  {
-    "file": "native-reference/FFmpeg-COPYING.LGPLv2.1",
-    "source": "https://raw.githubusercontent.com/FFmpeg/FFmpeg/n8.0/COPYING.LGPLv2.1",
-    "note": "FFmpeg 8.0 reference; exact wheel build commit remains unverified",
-    "sha256": "246041b6ecf9bc32d718a62c57877c78b5eb397b6467e74ed7ae2626ab189c30"
-  },
-  {
-    "file": "native-reference/FFmpeg-COPYING.LGPLv3",
-    "source": "https://raw.githubusercontent.com/FFmpeg/FFmpeg/n8.0/COPYING.LGPLv3",
-    "note": "FFmpeg 8.0 reference; exact wheel build commit remains unverified",
-    "sha256": "da7eabb7bafdf7d3ae5e9f223aa5bdc1eece45ac569dc21b3b037520b4464768"
-  },
-  {
-    "file": "native-reference/FFmpeg-LICENSE.md",
-    "source": "https://raw.githubusercontent.com/FFmpeg/FFmpeg/n8.0/LICENSE.md",
-    "note": "FFmpeg 8.0 reference; exact wheel build commit remains unverified",
-    "sha256": "2e1d16c72fd74e12063776371da757322f8b77589386532f4fd8634bde7de1af"
-  },
-  {
     "file": "native-reference/PortAudio-LICENSE.txt",
     "source": "https://raw.githubusercontent.com/PortAudio/portaudio/v19.7.0/LICENSE.txt",
     "note": "v19.7.0 is referenced in installed PortAudio binary build workflow",

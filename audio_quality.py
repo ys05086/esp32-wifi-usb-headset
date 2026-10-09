@@ -1,15 +1,28 @@
 """Continuous AAC-LC encode/decode for outbound quality comparison.
 
-The ESP32 wire format stays 48 kHz mono PCM16. No subprocesses or audio files.
-This object belongs to the codec worker, never the PortAudio callback.
+The ESP32 wire format stays 48 kHz mono PCM16. The codec is a minimal LGPL build of FFmpeg (only PCM, AAC,
+ADTS, pipes and the resampler), bundled as ffmpeg/ffmpeg.exe next to the app and built by the workflow from
+the pinned source (THIRD_PARTY_NOTICES.md). It runs as two child processes, PCM -> AAC (ADTS) and
+AAC -> PCM; this object feeds the first from the codec worker and threads collect the rest. Nothing here
+runs in the PortAudio callback, and no audio is written to files.
 """
+from collections import deque
 from dataclasses import dataclass, asdict
-from fractions import Fraction
 import math
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import threading
+import time
+
 import numpy as np
 
 SAMPLE_RATES = (16000, 24000, 32000, 44100, 48000)
 BITRATES = (16, 24, 32, 48, 64, 96, 128, 160, 192)
+FRAME_SAMPLES = 1024          # AAC-LC frame
+ENCODER_DELAY = 1024          # FFmpeg's AAC encoder primes one frame; ADTS cannot carry that, so it is cut
 
 
 def bitrates_for(rate):
@@ -45,63 +58,116 @@ class QualitySettings:
 
     @property
     def prime_blocks(self):
-        return math.ceil(1024 / self.sample_rate * 100) + 2 if self.mode == 'aac' else 0
+        # one AAC frame at the chosen rate, plus the two FFmpeg processes and pipes between them
+        return math.ceil(FRAME_SAMPLES / self.sample_rate * 100) + 6 if self.mode == 'aac' else 0
+
+
+def ffmpeg_path():
+    """The bundled ffmpeg (ffmpeg/ffmpeg.exe next to the app or this file), else ESP32_BRIDGE_FFMPEG, else PATH."""
+    here = Path(sys.executable).parent if getattr(sys, 'frozen', False) else Path(__file__).resolve().parent
+    for candidate in (here / 'ffmpeg' / 'ffmpeg.exe', here / 'ffmpeg' / 'ffmpeg'):
+        if candidate.is_file():
+            return str(candidate)
+    found = os.environ.get('ESP32_BRIDGE_FFMPEG') or shutil.which('ffmpeg')
+    if found:
+        return found
+    raise RuntimeError('AAC에 쓸 ffmpeg를 찾지 못했어요 (앱 폴더의 ffmpeg/ffmpeg.exe).')
 
 
 class AACProcessor:
     def __init__(self, settings):
-        import av
-        self.av = av
         self.settings = settings
-        self.encoder = av.CodecContext.create('aac', 'w')
-        self.encoder.sample_rate = settings.sample_rate
-        self.encoder.layout = 'mono'
-        self.encoder.format = 'fltp'
-        self.encoder.bit_rate = settings.bitrate_kbps * 1000
-        self.encoder.time_base = Fraction(1, settings.sample_rate)
-        self.encoder.open()
-        if self.encoder.bit_rate != settings.bitrate_kbps * 1000:
-            raise RuntimeError('AAC 인코더가 선택한 비트레이트를 적용하지 못했어요.')
-        self.decoder = av.CodecContext.create('aac', 'r')
-        self.decoder.extradata = self.encoder.extradata
-        self.decoder.open()
-        self.down = av.AudioResampler(format='fltp', layout='mono', rate=settings.sample_rate)
-        self.up = av.AudioResampler(format='s16', layout='mono', rate=48000)
-        self.input_frames = self.decoded_frames = self.encoded_bytes = self.encoded_samples = 0
+        ffmpeg = ffmpeg_path()
+        quiet = ['-hide_banner', '-nostats', '-loglevel', 'error']
+        # Both inputs skip stream probing: by default FFmpeg reads up to 5 s before it starts.
+        encode = [ffmpeg, *quiet, '-probesize', '32', '-analyzeduration', '0', '-f', 's16le', '-ar', '48000', '-ac', '1', '-i', 'pipe:0',
+                  '-af', f'aresample={settings.sample_rate}', '-c:a', 'aac', '-b:a', f'{settings.bitrate_kbps}k',
+                  '-f', 'adts', '-flush_packets', '1', 'pipe:1']
+        decode = [ffmpeg, *quiet, '-probesize', '32', '-analyzeduration', '0', '-f', 'aac', '-i', 'pipe:0',
+                  '-af', f'atrim=start_sample={ENCODER_DELAY},aresample=48000', '-ac', '1',
+                  '-f', 's16le', '-flush_packets', '1', 'pipe:1']
+        flags = subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
+        self.encoder = subprocess.Popen(encode, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                        bufsize=0, creationflags=flags)
+        self.decoder = subprocess.Popen(decode, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                        bufsize=0, creationflags=flags)
+        self.lock = threading.Lock()
+        self.input_frames = self.decoded_frames = self.encoded_bytes = self.encoded_frames = 0
         self.pending = bytearray()
         self.emitted_frames = 0
         self.first_output_ms = None
         self.closed = False
+        self.error = None
+        self.errors = {name: deque(maxlen=20) for name in ('encoder', 'decoder')}
+        self.threads = [threading.Thread(target=target, name=f'AAC-{target.__name__}', daemon=True)
+                        for target in (self._relay, self._collect)]
+        self.threads += [threading.Thread(target=self._drain, args=(name, proc), daemon=True)
+                         for name, proc in (('encoder', self.encoder), ('decoder', self.decoder))]
+        for thread in self.threads:
+            thread.start()
 
-    def _packets(self, packets):
-        for packet in packets:
-            self.encoded_bytes += packet.size
-            self.encoded_samples += packet.duration or self.encoder.frame_size
-            for frame in self.decoder.decode(packet):
-                # AAC encoder priming has negative PTS. Do not play it as extra silence.
-                if frame.pts is not None and frame.pts < 0:
-                    skip = min(frame.samples, -frame.pts)
-                    if skip == frame.samples:
-                        continue
-                    data = frame.to_ndarray()[:, skip:].copy()
-                    frame = self.av.AudioFrame.from_ndarray(data, format=frame.format.name, layout='mono')
-                    frame.sample_rate = self.settings.sample_rate
-                    frame.pts = 0
-                    frame.time_base = Fraction(1, self.settings.sample_rate)
-                for output in self.up.resample(frame):
-                    self._output(output)
+    def _relay(self):
+        """encoder ADTS -> decoder, counting AAC frames and payload bytes for the bitrate report."""
+        buffer = bytearray()
+        try:
+            while True:
+                chunk = self.encoder.stdout.read(4096)
+                if not chunk:
+                    break
+                buffer.extend(chunk)
+                while len(buffer) >= 7 and buffer[0] == 0xFF and buffer[1] & 0xF0 == 0xF0:
+                    length = (buffer[3] & 0x03) << 11 | buffer[4] << 3 | buffer[5] >> 5
+                    if len(buffer) < length:
+                        break
+                    header = 7 if buffer[1] & 0x01 else 9
+                    with self.lock:
+                        self.encoded_frames += (buffer[6] & 0x03) + 1
+                        self.encoded_bytes += length - header
+                    del buffer[:length]
+                self.decoder.stdin.write(chunk)
+        except (OSError, ValueError) as error:
+            if not self.closed:
+                self.error = self.error or f'AAC 전달 실패: {error}'
+        finally:
+            try:
+                self.decoder.stdin.close()
+            except OSError:
+                pass
 
-    def _output(self, frame):
-        self.decoded_frames += frame.samples
-        if self.first_output_ms is None:
-            self.first_output_ms = self.input_frames / 48
-        self.pending.extend(frame.to_ndarray().astype('<i2', copy=False).tobytes())
+    def _collect(self):
+        try:
+            while True:
+                chunk = self.decoder.stdout.read(4096)
+                if not chunk:
+                    break
+                with self.lock:
+                    if self.first_output_ms is None:
+                        self.first_output_ms = self.input_frames / 48
+                    self.pending.extend(chunk)
+                    self.decoded_frames += len(chunk) // 2
+        except (OSError, ValueError) as error:
+            if not self.closed:
+                self.error = self.error or f'AAC 복원 실패: {error}'
+
+    def _drain(self, name, proc):
+        for line in iter(proc.stderr.readline, b''):
+            self.errors[name].append(line.decode('utf-8', 'replace').strip())
+
+    def _check(self):
+        if self.error:
+            raise RuntimeError(self.error)
+        for name, proc in (('encoder', self.encoder), ('decoder', self.decoder)):
+            code = proc.poll()
+            if code is not None and not self.closed:
+                detail = ' / '.join(self.errors[name]) or f'종료 코드 {code}'
+                raise RuntimeError(f'AAC {name} 프로세스가 멈췄어요: {detail}')
 
     def _blocks(self):
-        size = len(self.pending) // 960 * 960
-        blocks = [bytes(self.pending[i:i+960]) for i in range(0, size, 960)]
-        del self.pending[:size]
-        self.emitted_frames += size // 2
+        with self.lock:
+            size = len(self.pending) // 960 * 960
+            blocks = [bytes(self.pending[i:i+960]) for i in range(0, size, 960)]
+            del self.pending[:size]
+            self.emitted_frames += size // 2
         return blocks
 
     def push(self, pcm):
@@ -109,42 +175,68 @@ class AACProcessor:
             raise RuntimeError('AAC processor already closed')
         if len(pcm) != 960:
             raise ValueError('Expected one 10 ms 48 kHz PCM16 mono block')
-        data = np.frombuffer(pcm, dtype='<i2').reshape(1, -1)
-        frame = self.av.AudioFrame.from_ndarray(data, format='s16', layout='mono')
-        frame.sample_rate = 48000
-        frame.pts = self.input_frames
-        frame.time_base = Fraction(1, 48000)
-        self.input_frames += 480
-        for output in self.down.resample(frame):
-            self._packets(self.encoder.encode(output))
+        self._check()
+        try:
+            self.encoder.stdin.write(pcm)
+        except OSError as error:
+            self._check()
+            raise RuntimeError(f'AAC 인코더에 쓰지 못했어요: {error}') from error
+        with self.lock:
+            self.input_frames += 480
         return self._blocks()
 
-    def finish(self):
-        """Finite synthetic/offline tests only; live stop discards pending audio."""
+    def finish(self, timeout=10):
+        """Finite synthetic/offline tests only: flush both processes and return the rest, cut to the input length.
+        A live stop calls close() and discards pending audio."""
         if self.closed:
             return []
-        if self.input_frames:
-            for output in self.down.resample(None):
-                self._packets(self.encoder.encode(output))
-            self._packets(self.encoder.encode(None))
-            for output in self.up.resample(None):
-                self._output(output)
+        self.encoder.stdin.close()
+        deadline = time.monotonic() + timeout
+        for thread in self.threads:
+            thread.join(max(0, deadline - time.monotonic()))
+        for proc in (self.encoder, self.decoder):
+            proc.wait(max(0.1, deadline - time.monotonic()))
+        if self.error:
+            raise RuntimeError(self.error)
         self.closed = True
-        # The encoder may pad its last 1024-sample frame; omit that test-only tail.
-        del self.pending[max(0, self.input_frames-self.emitted_frames)*2:]
+        with self.lock:
+            # the encoder pads its last 1024-sample frame; omit that test-only tail
+            del self.pending[max(0, self.input_frames - self.emitted_frames) * 2:]
         return self._blocks()
 
+    def close(self):
+        """Stop both processes at once (live stop); pending audio is dropped."""
+        self.closed = True
+        for proc in (self.encoder, self.decoder):
+            for stream in (proc.stdin, proc.stdout):
+                try:
+                    stream.close()
+                except OSError:
+                    pass
+            if proc.poll() is None:
+                proc.kill()
+        for proc in (self.encoder, self.decoder):
+            try:
+                proc.wait(2)
+            except subprocess.TimeoutExpired:
+                pass
+
+    def __del__(self):
+        if not getattr(self, 'closed', True):
+            self.close()
+
     def report(self):
-        return dict(settings=self.settings.to_dict(), frame_samples=self.encoder.frame_size,
-                    input_frames=self.input_frames, decoded_frames=self.decoded_frames,
-                    first_output_input_ms=self.first_output_ms,
-                    pending_ms=max(0, self.input_frames-self.decoded_frames)/48,
-                    encoded_average_kbps=(self.encoded_bytes*8*self.settings.sample_rate /
-                                          self.encoded_samples/1000 if self.encoded_samples else 0))
+        with self.lock:
+            return dict(settings=self.settings.to_dict(), frame_samples=FRAME_SAMPLES,
+                        input_frames=self.input_frames, decoded_frames=self.decoded_frames,
+                        first_output_input_ms=self.first_output_ms,
+                        pending_ms=max(0, self.input_frames-self.decoded_frames)/48,
+                        encoded_average_kbps=(self.encoded_bytes*8*self.settings.sample_rate /
+                                              (self.encoded_frames*FRAME_SAMPLES)/1000 if self.encoded_frames else 0))
 
 
 def quality_self_test():
-    """Exercise packaged AAC libraries without opening devices or network."""
+    """Exercise the bundled AAC codec without opening devices or network."""
     settings = QualitySettings('aac', 24000, 64)
     codec = AACProcessor(settings)
     pcm = (np.sin(2*np.pi*440*np.arange(48000)/48000)*8000).astype('<i2')
@@ -154,4 +246,4 @@ def quality_self_test():
     blocks.extend(codec.finish())
     audio = np.frombuffer(b''.join(blocks), dtype='<i2')
     return dict(ok=len(audio)>=47520 and float(np.std(audio))>1000,
-                output_frames=len(audio), **codec.report())
+                output_frames=len(audio), ffmpeg=ffmpeg_path(), **codec.report())

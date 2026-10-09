@@ -72,11 +72,11 @@ Standard는 Windows 호환, Apple은 Apple 호환 프로필이며 운영체제 �
 
 - 샘플레이트: 16 / 24 / 32 / 44.1 / 48 kHz.
 - AAC-LC 목표 비트레이트: 16 / 24 / 32 / 48 / 64 / 96 / 128 / 160 / 192 kbps. 16 kHz에서는 최대 96 kbps, 24 kHz에서는 최대 128 kbps만 표시합니다. 실제 평균 비트레이트는 입력에 따라 달라지며 진단에 기록됩니다.
-- 처리 경로: 입력 장치 → 48 kHz PCM → 선택한 샘플레이트로 AAC 인코딩·디코딩 → 48 kHz PCM → ESP32. 별도의 코덱 작업 스레드와 제한된 큐를 사용합니다. 마이크 콜백에서 AAC 처리나 외부 프로그램을 실행하지 않습니다.
+- 처리 경로: 입력 장치 → 48 kHz PCM → 선택한 샘플레이트로 AAC 인코딩·디코딩 → 48 kHz PCM → ESP32. 코덱 작업 스레드가 제한된 큐로 FFmpeg 하위 프로세스 두 개(인코딩·디코딩)에 넘깁니다. 마이크 콜백에서 AAC 처리나 외부 프로그램을 실행하지 않습니다.
 - 보드 USB 및 Wi-Fi 형식은 계속 48 kHz / 모노 PCM16입니다. 이 기능은 전송량을 줄이거나 보드 클럭을 바꾸지 않습니다. 통화·메신저 앱 자체의 녹음 인코더도 제어하지 않으며, 그 앱으로 다시 녹음하면 추가 압축될 수 있습니다.
 - AAC 프레임 준비와 복원에는 수십~수백 ms의 추가 지연이 생깁니다. 낮은 샘플레이트는 같은 1,024샘플 프레임을 모으는 시간이 더 길어질 수 있습니다. 상태창의 AAC/송신 대기는 현재 큐와 처리량으로 계산한 추정치이며 전체 지연은 아닙니다. 연결 중 설정 변경은 막고, 음소거는 이미 준비된 AAC 출력에도 즉시 적용합니다.
 
-AAC 런타임은 실행 폴더에 포함되므로 별도 FFmpeg/Python 설치가 필요 없습니다. 음성 파일은 자동 저장하지 않습니다. `--quality-self-test REPORT.json`은 합성 신호로 번들 인코더·디코더를 검사하며 마이크나 네트워크를 열지 않습니다.
+AAC는 실행 폴더의 `ffmpeg/ffmpeg.exe`(FFmpeg 최소 LGPL 빌드, 원본 소스 동봉, [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 참고)로 처리하므로 따로 설치할 것이 없습니다. 음성 파일은 자동 저장하지 않습니다. `--quality-self-test REPORT.json`은 합성 신호로 번들 인코더·디코더를 검사하며 마이크나 네트워크를 열지 않습니다.
 
 40개 노출 설정 조합의 실제 AAC 압축·복원, 출력 길이, 비트레이트 적용과 대역 제한, 기존 PCM 보존, 작업 종료/오류, 5개 샘플레이트별 가상 2분 송신 검사 등 22개 자동 테스트를 통과했습니다. 실제 PC 스케줄링, ESP32를 거친 실제 음질과 장시간 사용은 별도 확인이 필요합니다. 버퍼 부족으로 생긴 끊김을 AAC가 해결한다는 의미는 아닙니다.
 
@@ -84,7 +84,8 @@ AAC 런타임은 실행 폴더에 포함되므로 별도 FFmpeg/Python 설치가
 
 ```powershell
 python -m pip install -r requirements.txt
-python -m unittest test_protocol.py
+sh tools/build_ffmpeg.sh ffmpeg        # 예: MSYS2 UCRT64에서. AAC 기능과 시험은 ffmpeg/ffmpeg.exe를 씁니다
+python -m unittest discover
 python app.py
 python -m pip install pyinstaller==6.22.3
 python -m PyInstaller --noconfirm --windowed --onedir --name ESP32AudioBridge app.py

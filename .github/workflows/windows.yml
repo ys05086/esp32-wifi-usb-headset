@@ -9,17 +9,45 @@ on:
 permissions:
   contents: read
 jobs:
+  ffmpeg:
+    # The minimal LGPL FFmpeg the AAC comparison runs, cross-compiled from the pinned source with mingw-w64.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - id: cache
+        uses: actions/cache@v4
+        with:
+          path: ffmpeg
+          key: ffmpeg-lgpl-${{ hashFiles('tools/build_ffmpeg.sh') }}
+      - if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q gcc-mingw-w64-x86-64 make
+          sh tools/build_ffmpeg.sh ffmpeg --cross
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ffmpeg-lgpl
+          path: ffmpeg/
   build:
+    needs: ffmpeg
     runs-on: windows-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: ffmpeg-lgpl
+          path: ffmpeg
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
       - run: python -m pip install -r requirements.txt pyinstaller==6.22.3
       - run: python -m unittest discover
       - run: python -m PyInstaller --noconfirm --windowed --onedir --name ESP32AudioBridge app.py
+      - name: Bundle FFmpeg with its license texts and source
+        shell: pwsh
+        run: Copy-Item -Recurse ffmpeg dist/ESP32AudioBridge/ffmpeg
       - name: Verify bundled AAC codec
         shell: pwsh
         run: |

@@ -169,6 +169,7 @@ class HeadsetClient:
         finally:
             self.stop_event.set()
             if self.quality_thread: self.quality_thread.join(timeout=2)
+            if self.processor: self.processor.close()  # ends the FFmpeg child processes
             if sock:
                 try: sock.send(microphone(self.session, seq, b'', stop=True))
                 except OSError: pass

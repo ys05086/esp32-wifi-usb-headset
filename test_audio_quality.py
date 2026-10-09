@@ -33,7 +33,9 @@ class QualityTests(unittest.TestCase):
             for bitrate in bitrates_for(rate):
                 with self.subTest(rate=rate,bitrate=bitrate):
                     output,codec=encode(source,rate,bitrate)
-                    self.assertEqual(codec.encoder.bit_rate,bitrate*1000)
+                    # FFmpeg gets the requested rate; its AAC encoder may spend less on a plain tone.
+                    self.assertIn(f'{bitrate}k',codec.encoder.args)
+                    self.assertLess(codec.report()['encoded_average_kbps'],bitrate*1.3)
                     self.assertEqual(len(output),len(source))
                     self.assertGreater(np.std(output[5000:-5000]),3000)
                     self.assertLess(np.max(np.abs(output.astype(float))),13000)
@@ -41,6 +43,16 @@ class QualityTests(unittest.TestCase):
                     self.assertGreater(np.corrcoef(source[5000:-5000],output[5000:-5000])[0,1],.90)
                     self.assertIsNotNone(codec.first_output_ms)
                     self.assertEqual(codec.finish(),[])
+
+    def test_bitrate_setting_takes_effect(self):
+        # On noise the average follows the setting up the scale (the encoder caps near 6 bits per sample).
+        source=np.random.default_rng(0).normal(0,4000,48000)
+        for rate in SAMPLE_RATES:
+            with self.subTest(rate=rate):
+                averages=[encode(source,rate,b)[1].report()['encoded_average_kbps'] for b in bitrates_for(rate)]
+                for lower,higher in zip(averages,averages[1:]):self.assertGreater(higher,lower*.95)
+                for bitrate,average in zip(bitrates_for(rate),averages):
+                    if bitrate<=64:self.assertGreater(average,bitrate*.85)
 
     def test_sample_rate_removes_above_nyquist_content(self):
         t=np.arange(96000)/48000
@@ -76,14 +88,16 @@ class QualityTests(unittest.TestCase):
         thread.start()
         try:
             for _ in range(100):client.captured.put(bytes(960),timeout=2)
-            deadline=time.monotonic()+3
-            while client.quality_report.get('input_frames',0)<48000 and time.monotonic()<deadline:time.sleep(.01)
-            self.assertEqual(client.quality_report['input_frames'],48000)
+            deadline=time.monotonic()+5
+            while (client.quality_report.get('input_frames',0)<48000 or not client.quality_drops) and time.monotonic()<deadline:
+                if client.captured.empty():client.captured.put(bytes(960))  # keep the worker reporting
+                time.sleep(.01)
+            self.assertGreaterEqual(client.quality_report['input_frames'],48000)
             self.assertGreater(client.quality_drops,0)
             self.assertLessEqual(client.outbound.qsize(),20)
             self.assertIsNone(client.quality_error)
         finally:
-            client.stop();thread.join(2)
+            client.stop();thread.join(2);client.processor.close()
         self.assertFalse(thread.is_alive())
 
     def test_codec_error_stops_instead_of_sending_unprocessed_audio(self):
@@ -91,27 +105,43 @@ class QualityTests(unittest.TestCase):
         client.captured.put(b'bad block')
         client.processor=AACProcessor(client.quality)
         client.encode_audio()
+        client.processor.close()
         self.assertTrue(client.stop_event.is_set())
         self.assertIn('AAC',client.quality_error)
         self.assertTrue(client.outbound.empty())
 
-    def test_two_minutes_of_codec_batches_do_not_starve_paced_sender(self):
+    def test_real_time_codec_output_does_not_starve_paced_sender(self):
+        # The codec runs in two child processes, so this paces 10 ms blocks in real time (4 s per rate).
+        tone=(4000*np.sin(2*np.pi*440*np.arange(480)/48000)).astype('<i2').tobytes()
         for rate in SAMPLE_RATES:
             with self.subTest(rate=rate):
                 settings=QualitySettings('aac',rate,64)
                 codec=AACProcessor(settings)
-                pending=deque();ready=False;started=None;sent=0;max_queue=0
-                for tick in range(12000):
-                    pending.extend(codec.push(bytes(960)))
-                    max_queue=max(max_queue,len(pending))
-                    if not ready and len(pending)>=settings.prime_blocks:ready=True;started=tick
-                    if ready:
-                        self.assertTrue(pending, f'codec batch starvation at {tick*10} ms')
-                        self.assertEqual(len(pending.popleft()),960);sent+=1
-                self.assertIsNotNone(started)
-                self.assertLessEqual(started*10,350)
-                self.assertLessEqual(max_queue,20)
-                self.assertEqual(sent,12000-started)
+                try:
+                    pending=deque();ready=False;started=None;sent=0;max_queue=0
+                    begin=time.monotonic()
+                    for tick in range(400):
+                        time.sleep(max(0,begin+tick*.01-time.monotonic()))
+                        pending.extend(codec.push(tone))
+                        max_queue=max(max_queue,len(pending))
+                        if not ready and len(pending)>=settings.prime_blocks:ready=True;started=tick
+                        if ready:
+                            self.assertTrue(pending, f'codec starvation at {tick*10} ms')
+                            self.assertEqual(len(pending.popleft()),960);sent+=1
+                    self.assertIsNotNone(started)
+                    self.assertLessEqual(started*10,600)
+                    self.assertLessEqual(max_queue,20)
+                    self.assertEqual(sent,400-started)
+                finally:
+                    codec.close()
+
+    def test_close_ends_both_codec_processes(self):
+        codec=AACProcessor(QualitySettings('aac',24000,64))
+        for _ in range(20):codec.push(bytes(960))
+        codec.close()
+        self.assertIsNotNone(codec.encoder.poll())
+        self.assertIsNotNone(codec.decoder.poll())
+        with self.assertRaises(RuntimeError):codec.push(bytes(960))
 
 
 if __name__=='__main__':unittest.main()

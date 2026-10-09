@@ -14,37 +14,41 @@
 | NumPy 2.2.6 | 주 라이선스 BSD-3-Clause. 설치 패키지 LICENSE에 번들 의존성 고지가 함께 있음. |
 | sounddevice 0.5.6 | MIT. 함께 배포되는 PortAudio 등도 별도 확인 대상. |
 | soxr 1.0.0 | 설치 메타데이터 LGPL-2.1-or-later. libsoxr/PFFFT 고지 포함. |
-| PyAV 16.1.0 | BSD-3-Clause. FFmpeg 라이선스와 별개. |
-| 현재 로컬 PyAV의 FFmpeg DLL | avcodec/avformat/avutil/avfilter/swresample/swscale의 런타임 license 함수가 `LGPL version 3 or later`를 반환함. 아래 주의 참조. |
+| FFmpeg 7.1.1 (최소 빌드, `ffmpeg/ffmpeg.exe`) | **LGPL 2.1 이상.** AAC 비교 기능 전용. GPL·nonfree 구성 없이 PCM·AAC·ADTS·파이프·리샘플러만 넣어 [tools/build_ffmpeg.sh](tools/build_ffmpeg.sh)로 빌드함. |
 
-2026-10-08의 로컬 Windows CPython 3.10 환경과 로컬 빌드 배포물을 확인했습니다. **avcodec DLL의 PE import table에서 번들 x264/x265 DLL을 실제로 참조하는 것을 확인했습니다.** 따라서 FFmpeg가 반환한 LGPL 문자열만으로 전체 배포물의 조건을 판단하면 안 됩니다. 현재 ZIP을 MIT-only 또는 LGPL-only로 표시하지 않습니다. AAC 기능을 꺼도 포함된 라이브러리의 배포 조건은 없어지지 않습니다.
+**FFmpeg:** 이전에는 PyAV 휠에 들어 있던 FFmpeg DLL을 썼고, 그 DLL이 GPL인 x264/x265를 직접 불러오고 있었습니다. 지금은 PyAV를 쓰지 않습니다. 워크플로가 고정한 FFmpeg 원본 소스(SHA-256 확인)를 위 스크립트로 빌드하고, 빌드 스크립트는 configure 결과가 `LGPL version 2.1 or later`가 아니면 실패합니다. 앱 묶음의 `licenses/inventory.json`을 만드는 단계도 `--enable-gpl`/`--enable-nonfree`가 있거나 GPL 라이브러리가 들어 있으면 실패합니다.
 
-CI는 Python 3.11을 쓰므로 새 패키징 단계에서 고지 원문과 DLL 해시/버전 목록을 그 환경에서 다시 수집합니다. 저장소 `licenses/inventory.json`은 현재 로컬 빌드의 기록이며 모든 미래 빌드에 대한 선언이 아닙니다. 네이티브 참고 원문의 버전 대응이 확정되지 않은 경우 `reference-sources.json`에 표시했습니다.
+LGPL 조건을 위해 Windows ZIP의 `ffmpeg/` 폴더에 다음을 함께 넣습니다.
+
+- `ffmpeg.exe`, `COPYING.LGPLv2.1`, `LICENSE.md`(FFmpeg 원본의 라이선스 원문)
+- `source/ffmpeg-7.1.1.tar.xz`: 빌드에 쓴 수정하지 않은 원본 소스 그 자체
+- `BUILD.txt`: 버전, 소스 해시, configure 옵션
+
+앱은 `ffmpeg.exe`를 별도 프로그램으로 실행하므로, 사용자가 직접 빌드한 FFmpeg로 바꿔 넣을 수 있습니다.
+
+CI는 Python 3.11을 쓰며, 패키징 단계에서 고지 원문과 바이너리 해시/버전 목록을 그 환경에서 수집해 ZIP의 `licenses/inventory.json`에 넣습니다. 네이티브 참고 원문의 버전 대응이 확정되지 않은 경우 `reference-sources.json`에 표시했습니다.
 
 ## 프로젝트 코드의 MIT 적용 범위
 
 2026-10-08 소유자가 MIT 적용을 명시적으로 선택했습니다. 비상업 제한은 적용하지 않습니다. MIT 조건에 따라 상업 이용, 수정, 재배포가 가능하며 저작권·허락 고지를 유지해야 합니다.
 
-이 저장소의 PC 앱과 `firmware/`에서 직접 작성한 코드와 문서에 적용합니다. 펌웨어는 `firmware/LICENSE`를 따로 둡니다. 외부 원문·라이브러리·패치에 포함된 upstream 코드는 원래 조건을 유지합니다.
-
-우리 코드의 MIT 적용은 현재 FFmpeg 번들 전체를 MIT로 바꾸거나 GPL/LGPL 배포 의무를 없애지 않습니다. x264/x265 의존성 정리, 정확한 소스·빌드 자료 및 남은 고지 준비는 계속 필요합니다.
+이 저장소의 PC 앱과 `firmware/`에서 직접 작성한 코드와 문서에 적용합니다. 펌웨어는 `firmware/LICENSE`를 따로 둡니다. 외부 원문·라이브러리·패치에 포함된 upstream 코드는 원래 조건을 유지합니다. 함께 배포하는 FFmpeg는 LGPL 조건을 따릅니다.
 
 ## 이번에 준비한 고지
 
-- 설치 패키지 8개 및 CPython의 라이선스 원문, 파일별 SHA-256과 버전 기록.
-- PortAudio, Tcl/Tk, FFmpeg의 라이선스 참고 원문 및 출처.
+- 설치 패키지와 CPython의 라이선스 원문, 파일별 SHA-256과 버전 기록.
+- PortAudio, Tcl/Tk의 라이선스 참고 원문 및 출처.
+- FFmpeg 최소 빌드의 라이선스 원문, 원본 소스, 빌드 정보.
 - ESP-IDF, UAC, TinyUSB의 주요 고지 원문과 프로젝트 수정 사항 설명.
-- 다음 Windows 패키징 시 고지 파일 및 바이너리 목록을 동봉하는 절차.
 
-MIT/BSD/Apache 등은 조건을 지키면 상업 이용을 허용하고, GPL도 상업 판매 자체를 금지하지 않습니다. 외부 의존성이 있다는 이유로 타인의 상업 이용이 자동 금지되지는 않습니다.
+MIT/BSD/Apache 등은 조건을 지키면 상업 이용을 허용하고, LGPL·GPL도 상업 판매 자체를 금지하지 않습니다. 외부 의존성이 있다는 이유로 타인의 상업 이용이 자동 금지되지는 않습니다.
 
 ## 공개 배포 전에 남은 작업
 
-- 고지를 모은 구성 요소 이외의 FFmpeg 네이티브 의존성과 ESP-IDF 하위 구성 요소까지 정확한 버전/저작권 고지를 채웁니다. 이미 모은 원문만으로 전체 고지가 끝났다고 간주하지 않습니다.
-- FFmpeg/soxr 등 해당 LGPL 구성 요소의 정확한 바이너리에 대응하는 소스·빌드 정보 제공과 교체/재링크 조건을 충족하는 배포 방식을 준비합니다. 이름과 버전만 같은 임의 소스 링크로 충분하다고 가정하지 않습니다.
-- Python/Tcl/Tk, PortAudio, CFFI, FFmpeg의 외부 라이브러리와 ESP-IDF 하위 구성 요소까지 최종 산출물 기준으로 확인합니다.
+- soxr(libsoxr) 등 함께 배포되는 다른 LGPL 네이티브 구성 요소의 정확한 소스·빌드 정보와 교체 조건을 갖춥니다.
+- Python/Tcl/Tk, PortAudio, CFFI의 외부 라이브러리와 ESP-IDF 하위 구성 요소까지 최종 산출물 기준으로 고지를 채웁니다. 이미 모은 원문만으로 전체 고지가 끝났다고 간주하지 않습니다.
 
-현재 설치 문서 추가는 공개 배포 준비가 모두 완료됐다는 의미가 아닙니다. AAC 등 코덱 특허/상업 배포 조건은 오픈소스 라이선스만으로 면제된다고 단정할 수 없습니다.
+AAC 등 코덱 특허/상업 배포 조건은 오픈소스 라이선스만으로 면제된다고 단정할 수 없습니다.
 
 ## 원문
 
@@ -52,5 +56,3 @@ MIT/BSD/Apache 등은 조건을 지키면 상업 이용을 허용하고, GPL도 
 - [usb_device_uac 1.3.1 LICENSE](https://components.espressif.com/components/espressif/usb_device_uac/versions/1.3.1/license)
 - [TinyUSB 0.19.0 LICENSE](https://github.com/hathach/tinyusb/blob/0.19.0/LICENSE)
 - [FFmpeg 라이선스·배포 안내](https://ffmpeg.org/legal.html)
-- [x264의 GPL / 상용 라이선스 안내](https://images.videolan.org/developers/x264.html)
-- [x265 라이선스 안내](https://www.x265.org/)

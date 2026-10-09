@@ -74,11 +74,11 @@ Under **보내는 음질…** (sending quality), with the connection stopped, ch
 
 - Sample rates: 16 / 24 / 32 / 44.1 / 48 kHz.
 - AAC-LC target bitrates: 16 / 24 / 32 / 48 / 64 / 96 / 128 / 160 / 192 kbps (up to 96 kbps at 16 kHz, 128 kbps at 24 kHz). The actual average bitrate depends on the input and is recorded in the diagnostics.
-- Path: input device → 48 kHz PCM → AAC encode and decode at the chosen rate → 48 kHz PCM → ESP32, on its own codec thread with a bounded queue. The microphone callback never runs AAC or an external program.
+- Path: input device → 48 kHz PCM → AAC encode and decode at the chosen rate → 48 kHz PCM → ESP32, in two FFmpeg child processes fed by a codec thread with a bounded queue. The microphone callback never runs AAC or an external program.
 - The board's USB and Wi-Fi format stays 48 kHz mono PCM16. This does not reduce the network traffic or change the board's clock, nor does it control the encoder of the app recording on the device, which may compress again.
 - Preparing and decoding AAC frames adds tens to hundreds of milliseconds; lower sample rates take longer to fill the same 1,024-sample frame. The AAC/send wait shown in the status is an estimate from the queue and throughput, not the total delay. Settings are locked while connected; muting applies at once, also to AAC output already prepared.
 
-The AAC runtime ships in the app folder, so no separate FFmpeg or Python install is needed. No audio file is saved automatically. `--quality-self-test REPORT.json` checks the bundled encoder and decoder on a synthetic signal without opening a microphone or the network.
+AAC runs through `ffmpeg/ffmpeg.exe` in the app folder, a minimal LGPL build of FFmpeg shipped with its exact source (see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)), so nothing else needs installing. No audio file is saved automatically. `--quality-self-test REPORT.json` checks the bundled encoder and decoder on a synthetic signal without opening a microphone or the network.
 
 22 automated tests pass, covering real AAC encode and decode for all 40 offered settings, output length, bitrate and band limits, unchanged PCM, worker shutdown and errors, and a virtual two-minute send at each of the 5 sample rates. Real PC scheduling, the sound after the ESP32, and long sessions still need checking on hardware. AAC does not fix dropouts caused by buffer underruns.
 
@@ -86,7 +86,8 @@ The AAC runtime ships in the app folder, so no separate FFmpeg or Python install
 
 ```powershell
 python -m pip install -r requirements.txt
-python -m unittest test_protocol.py
+sh tools/build_ffmpeg.sh ffmpeg        # e.g. in MSYS2 UCRT64; the AAC tests and feature use ffmpeg/ffmpeg.exe
+python -m unittest discover
 python app.py
 python -m pip install pyinstaller==6.22.3
 python -m PyInstaller --noconfirm --windowed --onedir --name ESP32AudioBridge app.py
