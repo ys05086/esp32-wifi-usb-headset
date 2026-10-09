@@ -46,9 +46,8 @@ DWC_RETRY_NEW = '''      if (xfer->iso_retry > 0) {
         xfer->iso_retry--;'''
 
 
-# Frame-level diagnostics (counters only), applied last and restored first: the frame each isochronous
-# endpoint is armed in (an endpoint armed after the next SOF misses that frame) and the frame each OUT
-# packet arrived in.
+# Frame-level diagnostics and the late re-arm fix, applied last and restored first: the frame each
+# isochronous endpoint is armed in, the frame each OUT packet arrived in, and arming the right frame.
 DWC_DIAG_PATCHES = [
     ("""      const uint16_t byte_count = grxstsp.byte_count;
       xfer_ctl_t* xfer = XFER_CTL_BASE(epnum, TUSB_DIR_OUT);
@@ -59,13 +58,54 @@ DWC_DIAG_PATCHES = [
         vs_usb_diag_out_rx(grxstsp.frame_number);
       }
 """),
-    ("""    const uint32_t odd_now = dsts.frame_number & 1u;
+    ("""  uint8_t iso_retry; // ISO retry counter
+} xfer_ctl_t;""", """  uint8_t iso_retry; // ISO retry counter
+  uint16_t iso_frame;       // Headset: the frame this isochronous endpoint was last armed for
+  bool iso_frame_valid;
+} xfer_ctl_t;"""),
+    # The fix. An endpoint is armed for the frame after the current one. When the interrupt that re-arms it
+    # runs just after the SOF of the frame following the one it last served (the microphone's IN work is
+    # handled first, and the speaker's packet comes late in the frame), that skips a frame and its packet:
+    # 1.5-2% lost while both directions stream, none with the speaker alone. Arm that frame instead.
+    ("""  if (depctl.type == DEPCTL_EPTYPE_ISOCHRONOUS) {
+    const dwc2_dsts_t dsts = {.value = dwc2->dsts};
+    const uint32_t odd_now = dsts.frame_number & 1u;
     if (odd_now) {
-      depctl.set_data0_iso_even = 1;""", """    const uint32_t odd_now = dsts.frame_number & 1u;
+      depctl.set_data0_iso_even = 1;
+    } else {
+      depctl.set_data1_iso_odd = 1;
+    }
+  }""", """  if (depctl.type == DEPCTL_EPTYPE_ISOCHRONOUS) {
+    const dwc2_dsts_t dsts = {.value = dwc2->dsts};
+    const uint32_t now = dsts.frame_number;
+    uint32_t target = (now + 1u) & 0x3FFFu;
+    if (xfer->iso_frame_valid && ((xfer->iso_frame + 1u) & 0x3FFFu) == now) {
+      target = now;   // re-armed after that frame's SOF: its packet is still to come
+    }
+    xfer->iso_frame = (uint16_t) target;
+    xfer->iso_frame_valid = true;
     extern void vs_usb_diag_iso_arm(unsigned epnum, unsigned dir, unsigned frame);
-    vs_usb_diag_iso_arm(epnum, dir, dsts.frame_number);
-    if (odd_now) {
-      depctl.set_data0_iso_even = 1;"""),
+    vs_usb_diag_iso_arm(epnum, dir, now);
+    if (target & 1u) {
+      depctl.set_data1_iso_odd = 1;
+    } else {
+      depctl.set_data0_iso_even = 1;
+    }
+  }"""),
+    # The IN retry re-arms for the next frame by itself: keep the record in step.
+    ("""        if (odd_now) {
+          depctl.set_data0_iso_even = 1;
+        } else {
+          depctl.set_data1_iso_odd = 1;
+        }
+        epin->diepctl = depctl.value;""", """        xfer->iso_frame = (uint16_t) ((dsts.frame_number + 1u) & 0x3FFFu);
+        xfer->iso_frame_valid = true;
+        if (odd_now) {
+          depctl.set_data0_iso_even = 1;
+        } else {
+          depctl.set_data1_iso_odd = 1;
+        }
+        epin->diepctl = depctl.value;"""),
 ]
 
 
