@@ -32,12 +32,12 @@ static void identity(void) {
     assert(board_password_valid(long_one));
 }
 
-static uart_event_t feed(uart_command_t *c, const char *text, uart_event_t *last_line) {
-    uart_event_t last = UART_NONE;
+static uart_command_event_t feed(uart_command_t *c, const char *text, uart_command_event_t *last_line) {
+    uart_command_event_t last = COMMAND_NONE;
     for (const char *p = text; *p; p++) {
-        uart_event_t e = uart_command_feed(c, (uint8_t)*p);
-        if (e != UART_NONE) last = e;
-        if (e == UART_LINE && last_line) *last_line = e;
+        uart_command_event_t e = uart_command_feed(c, (uint8_t)*p);
+        if (e != COMMAND_NONE) last = e;
+        if (e == COMMAND_LINE && last_line) *last_line = e;
     }
     return last;
 }
@@ -46,23 +46,23 @@ static void commands(void) {
     uart_command_t c;
     uart_command_init(&c);
     // the probe keys still work on their own
-    assert(uart_command_feed(&c, 't') == UART_PROBE);
-    assert(uart_command_feed(&c, 's') == UART_SILENCE);
-    assert(uart_command_feed(&c, '\n') == UART_NONE);
+    assert(uart_command_feed(&c, 't') == COMMAND_PROBE);
+    assert(uart_command_feed(&c, 's') == COMMAND_SILENCE);
+    assert(uart_command_feed(&c, '\n') == COMMAND_NONE);
     // a setup line, with 't' and 's' inside, ends on CR or LF and does not start the probe
-    assert(feed(&c, "@set {\"usb_mode\":\"standard\"}\r\n", NULL) == UART_LINE);
+    assert(feed(&c, "@set {\"usb_mode\":\"standard\"}\r\n", NULL) == COMMAND_LINE);
     assert(!strcmp(c.line, "set {\"usb_mode\":\"standard\"}"));
-    assert(feed(&c, "@get\n", NULL) == UART_LINE && !strcmp(c.line, "get"));
+    assert(feed(&c, "@get\n", NULL) == COMMAND_LINE && !strcmp(c.line, "get"));
     // '@' in the middle of a line is not a command (a 't' there is a probe key, as any 't' outside a command)
-    assert(feed(&c, "x@ge\n", NULL) == UART_NONE);
+    assert(feed(&c, "x@ge\n", NULL) == COMMAND_NONE);
     // too long: reported once, then the next line works
     char big[UART_COMMAND_MAX + 10];
     big[0] = '@'; memset(big + 1, 'a', sizeof big - 3); big[sizeof big - 2] = '\n'; big[sizeof big - 1] = 0;
-    assert(feed(&c, big, NULL) == UART_TOO_LONG);
-    assert(feed(&c, "@new-password\n", NULL) == UART_LINE && !strcmp(c.line, "new-password"));
+    assert(feed(&c, big, NULL) == COMMAND_TOO_LONG);
+    assert(feed(&c, "@new-password\n", NULL) == COMMAND_LINE && !strcmp(c.line, "new-password"));
     // exactly the maximum fits
     big[UART_COMMAND_MAX + 1] = '\n'; big[UART_COMMAND_MAX + 2] = 0;
-    assert(feed(&c, big, NULL) == UART_LINE && strlen(c.line) == UART_COMMAND_MAX);
+    assert(feed(&c, big, NULL) == COMMAND_LINE && strlen(c.line) == UART_COMMAND_MAX);
 }
 
 int main(void) {

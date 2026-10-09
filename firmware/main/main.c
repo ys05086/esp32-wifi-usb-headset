@@ -97,11 +97,10 @@ void app_main(void)
         while ((got = uart_read_bytes(UART_NUM_0, bytes, sizeof bytes, 0)) > 0) {
             for (int i = 0; i < got; i++) {
                 switch (uart_command_feed(&input, bytes[i])) {
-                case UART_PROBE: trigger(true); break;
-                case UART_SILENCE: trigger(false); break;
-                case UART_LINE: board_config_command(input.line); break;
-                case UART_TOO_LONG: printf("@err line too long
-"); fflush(stdout); break;
+                case COMMAND_PROBE: trigger(true); break;
+                case COMMAND_SILENCE: trigger(false); break;
+                case COMMAND_LINE: board_config_command(input.line); break;
+                case COMMAND_TOO_LONG: printf("@err line too long\n"); fflush(stdout); break;
                 default: break;
                 }
             }
