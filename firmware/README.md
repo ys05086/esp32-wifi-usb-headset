@@ -20,7 +20,7 @@ ESP32-S3-N16R8이 Wi-Fi로 받은 PCM을 **USB 마이크**로 내보내고, **US
 공유기 설정 없이 보드 AP에 직접 연결한 채 `192.168.4.1`로 보내는 것도 가능하다.
 이 AP는 인터넷을 제공하지 않으므로, 기기나 컴퓨터가 인터넷도 써야 하면 같은 공유기 사용을 권장한다.
 Wi-Fi 설정은 보드 NVS에 저장된다. 설정 페이지는 로컬 네트워크용이며 인터넷에 포트를 열지 않는다.
-보드 AP 이름은 MAC 끝 두 바이트로 `ESP32-Headset-1A2B`처럼 만들고, 비밀번호는 처음 켤 때 ADC 잡음 엔트로피로 12글자(60비트, `abcd-efgh-jkmn` 꼴)를 만들어 NVS `vs_board`에 둔다. 앱 업데이트로는 바뀌지 않고, 설정 초기화나 `@new-password`로만 바뀐다.
+보드 AP 이름은 MAC 끝 두 바이트로 `ESP32-Headset-1A2B`처럼 만들고, 비밀번호는 처음 켤 때 ADC 잡음 엔트로피로 12글자(60비트, `abcd-efgh-jkmn` 꼴)를 만들어 NVS `vs_board`에 둔다. 앱 업데이트로는 바뀌지 않고, 직접 정한 비밀번호(`@set {"ap_password":"..."}`, 8~63자 ASCII), `@new-password`, 설정 초기화로만 바뀐다.
 설정 변경(`/wifi`, `/usb-mode`)은 보드 AP 쪽 접속에서만 받는다. 공유기 쪽에서는 `/status`만 읽힌다. COM 포트 명령은 `@get`, `@set {json}`(`wifi_ssid`·`wifi_password`·`ap_password`·`usb_mode`), `@new-password`, `@reboot`, `@help`이고 답은 한 줄 `@ok {json}` 또는 `@err 이유`다.
 
 설정 프로그램의 **USB 모드**(설정 페이지의 **USB compatibility**)는 USB로 꽂은 기기의 호환성 설정이다. Wi-Fi 클라이언트의 OS와는 무관하다.

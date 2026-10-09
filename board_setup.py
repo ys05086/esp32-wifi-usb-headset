@@ -57,13 +57,16 @@ class SetupWindow:
         box = ttk.LabelFrame(frame, text='보드 자체 Wi-Fi', padding=(10, 6)); box.pack(fill='x', pady=(0, 6))
         self.ap_ssid, self.ap_password = tk.StringVar(), tk.StringVar()
         self.field(box, 0, '이름', self.ap_ssid)
-        self.field(box, 1, '비밀번호', self.ap_password)
+        self.field(box, 1, '비밀번호', self.ap_password, editable=True)
         buttons = ttk.Frame(box); buttons.grid(row=1, column=2, sticky='e')
         self.copy_button = ttk.Button(buttons, text='복사', command=self.copy_password)
         self.copy_button.pack(side='left')
-        self.new_button = ttk.Button(buttons, text='새 비밀번호', command=self.new_password)
+        self.ap_button = ttk.Button(buttons, text='저장', command=self.save_ap_password)
+        self.ap_button.pack(side='left', padx=(6, 0))
+        self.new_button = ttk.Button(buttons, text='무작위', command=self.new_password)
         self.new_button.pack(side='left', padx=(6, 0))
-        ttk.Label(box, text='보드마다 다른 비밀번호예요. 공유기 없이 휴대폰을 이 Wi-Fi에 바로 연결하면 보드 주소는 192.168.4.1이에요.',
+        ttk.Label(box, text='비밀번호는 고쳐서 저장하거나 무작위로 만들 수 있어요 (8~63자, 영문·숫자·기호). '
+                  '공유기 없이 휴대폰을 이 Wi-Fi에 바로 연결하면 보드 주소는 192.168.4.1이에요.',
                   style='Hint.TLabel', wraplength=590).grid(row=2, column=0, columnspan=3, sticky='w', pady=(6, 0))
         box.columnconfigure(1, weight=1)
 
@@ -121,9 +124,9 @@ class SetupWindow:
             self.find_ports()
         root.after(100, self.poll)
 
-    def field(self, box, row, label, variable):
+    def field(self, box, row, label, variable, editable=False):
         ttk.Label(box, text=label).grid(row=row, column=0, sticky='w')
-        ttk.Entry(box, textvariable=variable, state='readonly', font=('Consolas', 11)).grid(
+        ttk.Entry(box, textvariable=variable, state='normal' if editable else 'readonly', font=('Consolas', 11)).grid(
             row=row, column=1, sticky='ew', padx=8, pady=3)
 
     # --- background work: one job at a time, results back on the Tk thread
@@ -234,7 +237,8 @@ class SetupWindow:
         else:
             self.versions.set(f'설치할 펌웨어: 없음 · {self.bundle_error} · 지금 보드: {board}')
         ready = not self.busy and bool(s)
-        for button in (self.copy_button, self.new_button, self.wifi_button, self.forget_button, self.mode_button):
+        for button in (self.copy_button, self.ap_button, self.new_button, self.wifi_button, self.forget_button,
+                       self.mode_button):
             button.configure(state='normal' if ready else 'disabled')
         self.install_button.configure(state='normal' if not self.busy and self.bundle else 'disabled')
         self.folder_button.configure(state='disabled' if self.busy else 'normal')
@@ -252,8 +256,25 @@ class SetupWindow:
                 self.apply(state, message)
         return done
 
+    def save_ap_password(self):
+        password = self.ap_password.get()
+        problem = board_link.ap_password_problem(password)
+        if problem:
+            self.status.set(f'보드 Wi-Fi 비밀번호: {problem}')
+            return
+        if self.state and password == self.state.get('ap_password'):
+            self.status.set('보드 Wi-Fi 비밀번호가 그대로예요. 칸에서 고친 뒤 저장하세요.')
+            return
+        text = f'보드 Wi-Fi 비밀번호를 "{password}"로 바꿀까요?\n보드 Wi-Fi에 바로 연결해 쓰던 휴대폰과 PC는 새 비밀번호로 다시 연결해야 해요.'
+        if len(password) < 10:
+            text += '\n\n10자보다 짧으면 근처에서 추측하기 쉬워요.'
+        if not messagebox.askyesno('보드 Wi-Fi 비밀번호', text, parent=self.root):
+            return
+        self.run('비밀번호를 저장하는 중…', self.with_link(lambda link: link.set(ap_password=password)),
+                 self.changed('비밀번호를 저장했어요. 보드 Wi-Fi에 연결했던 기기는 새 비밀번호로 다시 연결하세요.'))
+
     def new_password(self):
-        if not messagebox.askyesno('새 비밀번호', '보드 Wi-Fi 비밀번호를 새로 만들까요?\n보드 Wi-Fi에 바로 연결해 쓰던 휴대폰과 PC는 '
+        if not messagebox.askyesno('무작위 비밀번호', '보드 Wi-Fi 비밀번호를 무작위로 새로 만들까요?\n보드 Wi-Fi에 바로 연결해 쓰던 휴대폰과 PC는 '
                                    '새 비밀번호로 다시 연결해야 해요.', parent=self.root):
             return
         self.run('새 비밀번호를 만드는 중…', self.with_link(lambda link: link.new_password()),

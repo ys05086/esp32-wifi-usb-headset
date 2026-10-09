@@ -8,7 +8,7 @@ import zlib
 
 import esp_rom
 import firmware_bundle
-from board_link import BoardError, BoardLink
+from board_link import BoardError, BoardLink, ap_password_problem
 from esp_rom import RomError, RomLoader, SlipReader, slip_encode
 
 
@@ -279,6 +279,16 @@ class LinkTests(unittest.TestCase):
         self.assertEqual(state['wifi_ssid'], '우리집 2.4G')
         self.assertEqual(board.commands[-1], 'set {"wifi_ssid":"우리집 2.4G","wifi_password":"12345678"}')
         self.assertIn('ROUTER IP: 192.168.0.14', link.log[-1])
+
+    def test_own_board_password_rules(self):
+        self.assertIsNone(ap_password_problem('my-board-2024!'))
+        self.assertIsNone(ap_password_problem('12345678'))
+        self.assertIsNone(ap_password_problem('x' * 63))
+        for bad in ('short', 'x' * 64, ' padded123', '한글비밀번호입니다', 'tab\tinside1'):
+            self.assertIsNotNone(ap_password_problem(bad), bad)
+        board = FakeBoard()
+        state = BoardLink(board, clock=Clock()).set(ap_password='my-board-2024!')
+        self.assertEqual(state['ap_password'], 'my-board-2024!')
 
     def test_errors_and_silence(self):
         board = FakeBoard()

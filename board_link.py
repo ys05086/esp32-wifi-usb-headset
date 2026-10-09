@@ -16,6 +16,17 @@ class BoardError(Exception):
     pass
 
 
+def ap_password_problem(text):
+    """None if the board takes `text` as its own Wi-Fi password (WPA2: 8-63 printable ASCII), else why not."""
+    if text != text.strip():
+        return '앞뒤 공백은 빼 주세요. 휴대폰에서 칠 때 헷갈려요.'
+    if not 8 <= len(text) <= 63:
+        return '8~63자로 정하세요.'
+    if any(not ' ' <= c <= '~' for c in text):
+        return '영문, 숫자, 기호만 쓸 수 있어요 (한글·이모지는 Wi-Fi 비밀번호에 못 써요).'
+    return None
+
+
 def open_port(name, baud=115200):
     import serial
     port = serial.Serial()
