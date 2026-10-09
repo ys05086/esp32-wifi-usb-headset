@@ -42,7 +42,8 @@ static uint32_t generation, return_sent, return_dropped;
 // Device sound lost on the board without a count before: frames of half-built blocks thrown away (a 50 ms
 // stall or a new session), and finished blocks not sent: too old (over 80 ms) or no longer for this phone.
 static uint32_t return_partial_frames, return_stale, return_invalid;
-// The phone's speaker volume (speaker_volume.h): set from the TinyUSB task, applied to the sound sent to the PC.
+// The listening volume (speaker_volume.h): the phone sets it from the TinyUSB task, the PC app from the UDP task;
+// applied to the sound sent to the PC.
 static speaker_volume_t phone_volume;
 static int32_t phone_gain[2] = {SPEAKER_GAIN_UNITY, SPEAKER_GAIN_UNITY};
 static const char page[] =
@@ -155,7 +156,18 @@ static void udp_task(void *arg) {
     while(1) {
         struct sockaddr_in peer; socklen_t peer_len=sizeof peer;
         int n=recvfrom(fd,packet,sizeof packet,0,(struct sockaddr*)&peer,&peer_len);
-        if(n>=0) {
+        if(n==16 && !memcmp(packet,"VSL1",4)) {
+            // The PC app sets the listening level: VSL1, session, level (int16, 1/256 dB; INT16_MIN silent), 0,
+            // command id. Taken only from the PC streaming now, for its session.
+            uint32_t session,command; int16_t level;
+            memcpy(&session,packet+4,4);memcpy(&level,packet+8,2);memcpy(&command,packet+12,4);
+            bool taken=false;
+            portENTER_CRITICAL(&pcm_lock);
+            bool same_peer=owner_valid && owner.sin_addr.s_addr==peer.sin_addr.s_addr && owner.sin_port==peer.sin_port;
+            if(same_peer && pcm.active && session==pcm.session) taken=speaker_volume_pc(&phone_volume,level,command);
+            portEXIT_CRITICAL(&pcm_lock);
+            phone_volume_changed(taken);
+        } else if(n>=0) {
             uint32_t reply[6]; bool accepted, full;
             int64_t now=esp_timer_get_time()/1000;
             portENTER_CRITICAL(&pcm_lock);
@@ -173,8 +185,18 @@ static void udp_task(void *arg) {
             full=duplex;
             reply[0]=full?0x32415356:0x31415356; reply[1]=pcm.received; reply[2]=pcm.underruns; reply[3]=(uint32_t)pcm.count;
             reply[4]=return_sent;reply[5]=return_dropped;
+            // With each reply, the listening level: VSV1, level (int16, 1/256 dB; INT16_MIN silent), flags (1: set by
+            // the PC, 2: the phone sets a volume), changes from either side, the PC's last command id.
+            uint8_t level_state[16];
+            int16_t level=speaker_volume_level(&phone_volume);
+            uint16_t level_flags=(phone_volume.pc_set?1:0)|(phone_volume.phone_seen?2:0);
+            memcpy(level_state,"VSV1",4);memcpy(level_state+4,&level,2);memcpy(level_state+6,&level_flags,2);
+            memcpy(level_state+8,&phone_volume.changes,4);memcpy(level_state+12,&phone_volume.pc_command,4);
             portEXIT_CRITICAL(&pcm_lock);
-            if(accepted && reply[1]%10==0) sendto(fd,reply,full?24:16,0,(struct sockaddr*)&peer,peer_len);
+            if(accepted && reply[1]%10==0) {
+                sendto(fd,reply,full?24:16,0,(struct sockaddr*)&peer,peer_len);
+                sendto(fd,level_state,sizeof level_state,0,(struct sockaddr*)&peer,peer_len);
+            }
         }
         // Bound work so incoming microphone packets are serviced every iteration.
         for(int i=0;i<8 && xQueueReceive(return_queue,&block,0)==pdTRUE;i++) {
@@ -261,7 +283,8 @@ static esp_err_t status_get(httpd_req_t *req) {
     cJSON_AddNumberToObject(root,"return_partial_frames",partial);
     cJSON_AddNumberToObject(root,"return_stale",stale);
     cJSON_AddNumberToObject(root,"return_invalid",invalid);
-    // the phone's speaker volume in dB (master, left, right), mute, and the gain applied to the sound sent
+    // the phone's speaker volume in dB (master, left, right), mute, the shared level (the PC's while it holds), and
+    // the gain applied to the sound sent
     portENTER_CRITICAL(&pcm_lock);
     speaker_volume_t volume=phone_volume;
     int32_t applied[2]={phone_gain[0],phone_gain[1]};
@@ -275,6 +298,12 @@ static esp_err_t status_get(httpd_req_t *req) {
         }
         for(unsigned i=0;gain && i<2;i++)cJSON_AddItemToArray(gain,cJSON_CreateNumber(applied[i]/65536.0));
         cJSON_AddNumberToObject(phone,"changes",volume.changes);
+        cJSON_AddBoolToObject(phone,"phone_seen",volume.phone_seen);
+        int16_t level=speaker_volume_level(&volume);
+        if(level==SPEAKER_LEVEL_SILENT)cJSON_AddNullToObject(phone,"level_db");
+        else cJSON_AddNumberToObject(phone,"level_db",level/256.0);
+        cJSON_AddBoolToObject(phone,"pc_set",volume.pc_set);
+        cJSON_AddNumberToObject(phone,"pc_command",volume.pc_command);
     }
     cJSON *usb=cJSON_AddObjectToObject(root,"usb");
     if(!usb){cJSON_Delete(root);return httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"Diagnostic allocation failed");}

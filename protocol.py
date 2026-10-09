@@ -1,4 +1,5 @@
 """ESP32 Wi-Fi headset duplex-v1: 48 kHz mono PCM16LE, 480 frames per UDP packet."""
+import secrets
 import struct
 import threading
 import time
@@ -14,6 +15,85 @@ def microphone(session, sequence, pcm, stop=False):
     if not session or (len(pcm) != (0 if stop else PCM_BYTES)):
         raise ValueError('Invalid microphone packet')
     return HEADER.pack(b'VSM1', session, sequence, 0 if stop else FRAMES, 1 if stop else 2) + pcm
+
+
+# The listening level the board applies to the device's sound (firmware with it reports it; older firmware
+# does not, and an older app ignores the report). Levels are in 1/256 dB, SILENT for silence.
+LEVEL_COMMAND = struct.Struct('<4sIhHI')   # VSL1, session, level, 0, command id
+LEVEL_STATE = struct.Struct('<4shHII')     # VSV1, level, flags (1: set by the PC, 2: the phone sets one), changes, command
+SILENT = -32768
+
+
+def level_command(session, db, command):
+    """VSL1: the PC sets the board's listening level (dB, None for silence)."""
+    raw = SILENT if db is None else max(-32767, min(0, round(db * 256)))
+    return LEVEL_COMMAND.pack(b'VSL1', session, raw, 0, command)
+
+
+def slider_db(position):
+    """The listening slider: 0 is silence, 100 is 0 dB, 2 positions a dB."""
+    return None if position <= 0 else (min(position, 100) - 100) / 2
+
+
+def slider_position(db):
+    return 0.0 if db is None else max(0.0, min(100.0, 100 + 2 * db))
+
+
+class ListeningLevel:
+    """The board's listening level as the PC app sees and sets it: the phone's volume, or the PC's when the PC
+    changed it last. The board applies it, so once it reports one the app plays at unity. set() asks for a
+    level; the command goes out now and again every RESEND until the board echoes it, for at most GIVE_UP.
+    The UI thread calls set(); the network thread state() and due().
+    """
+    RESEND = .1
+    GIVE_UP = 3.0
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.linked = False       # the board reports a level and applies it
+        self.db = 0.0             # the board's level; None: silent
+        self.by_pc = self.phone_sets = False
+        self.changes = None
+        # A fresh id each connection: the board ignores a repeat of the last one it took.
+        self.command = secrets.randbelow(2**32)
+        self.wanted = None        # (command, dB) the board has yet to echo
+        self.asked_at = self.sent_at = 0.0
+
+    def state(self, data):
+        """Takes a VSV1 report; False for any other packet."""
+        if len(data) != LEVEL_STATE.size or data[:4] != b'VSV1':
+            return False
+        _, raw, flags, changes, command = LEVEL_STATE.unpack(data)
+        with self.lock:
+            self.db = None if raw == SILENT else raw / 256
+            self.by_pc, self.phone_sets = bool(flags & 1), bool(flags & 2)
+            self.changes, self.linked = changes, True
+            if self.wanted and command == self.wanted[0]:
+                self.wanted = None
+        return True
+
+    def set(self, db, now=None):
+        with self.lock:
+            self.command = (self.command + 1) & 0xffffffff
+            self.wanted = (self.command, db)
+            self.asked_at, self.sent_at = time.monotonic() if now is None else now, 0.0
+
+    def due(self, now):
+        """The (command, dB) to send now, if any."""
+        with self.lock:
+            if not self.wanted:
+                return None
+            if now - self.asked_at > self.GIVE_UP:
+                self.wanted = None
+                return None
+            if now - self.sent_at < self.RESEND:
+                return None
+            self.sent_at = now
+            return self.wanted
+
+    @property
+    def pending(self):
+        return self.wanted is not None
 
 
 class LevelReader:

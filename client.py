@@ -10,7 +10,7 @@ import time
 import sys
 import numpy as np
 import sounddevice as sd
-from protocol import LevelReader, ReturnBuffer, microphone
+from protocol import LevelReader, ListeningLevel, ReturnBuffer, level_command, microphone
 from audio_format import endpoint_format, PCMConverter
 from audio_quality import QualitySettings, AACProcessor
 
@@ -22,6 +22,7 @@ class HeadsetClient:
         self.session = secrets.randbelow(2**32 - 1) + 1
         self.returns = ReturnBuffer(self.session, buffer_ms)
         self.level = LevelReader(self.returns)   # plays the device's sound at the pace it arrives
+        self.listening = ListeningLevel()        # the board's listening level, linked with the phone's volume
         self.captured = queue.Queue(maxsize=20)
         self.quality = quality or QualitySettings()
         self.outbound = queue.Queue(maxsize=20) if self.quality.mode == 'aac' else self.captured
@@ -77,7 +78,8 @@ class HeadsetClient:
             self.playback_converter.push(np.frombuffer(pcm, dtype='<i2'))
             mono = self.playback_converter.pop(frames)
         if not self.return_muted:
-            mono = mono.astype(np.float32) * self.output_gain
+            # Firmware that reports a listening level applies it itself; older firmware, the app's slider here.
+            mono = mono.astype(np.float32) * (1.0 if self.listening.linked else self.output_gain)
             data[:] = np.clip(mono, -32768, 32767).astype(np.int16)[:, None]
 
     def encode_audio(self):
@@ -151,6 +153,10 @@ class HeadsetClient:
                         try: sock.send(microphone(self.session, seq, pcm)); self.sent += 1
                         except BlockingIOError: self.input_drops += 1
                         seq = (seq + 1) & 0xffffffff; next_send += .01
+                        level = self.listening.due(now)
+                        if level:
+                            try: sock.send(level_command(self.session, level[1], level[0]))
+                            except BlockingIOError: pass
                     readable, _, _ = select.select([sock], [], [], max(0, min(.01, next_send-time.monotonic())))
                     if readable:
                         for _ in range(32):
@@ -159,7 +165,7 @@ class HeadsetClient:
                             if len(data) == 24 and data[:4] == b'VSA2':
                                 _, self.board_received, self.board_underruns, _, _, self.board_return_drops = struct.unpack('<4sIIIII', data)
                                 last_ack = time.monotonic(); self.status = '양방향 연결됨 · 기기 소리는 선택한 출력으로 재생'
-                            else: self.returns.push(data)
+                            elif not self.listening.state(data): self.returns.push(data)
                     if now - max(started, last_ack) > 8:
                         raise RuntimeError('보드 응답 없음: IP·같은 네트워크·양방향 펌웨어를 확인하세요.')
                     if last_ack and now-last_ack>2: self.status = '보드 응답이 지연되고 있어요.'

@@ -2,10 +2,12 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import time
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import sounddevice as sd
 from client import HeadsetClient
+from protocol import slider_db, slider_position
 from board_status import BoardStatus
 from audio_quality import QualitySettings, quality_self_test
 from quality_dialog import show_quality
@@ -51,11 +53,12 @@ class App:
         ttk.Checkbutton(row,text='보낼 소리 음소거',variable=self.mute,command=self.controls).pack(side='left')
         ttk.Checkbutton(row,text='기기 소리 음소거',variable=self.deafen,command=self.controls).pack(side='right')
         self.volume=tk.DoubleVar(value=80)
+        self.volume_label=tk.StringVar(value='듣기 크기');self.level_shown=None
         row=ttk.Frame(frame);row.pack(fill='x')
-        ttk.Label(row,text='듣기 크기').pack(side='left')
+        ttk.Label(row,textvariable=self.volume_label).pack(side='left')
         ttk.Button(row,text='보내는 음질…',command=self.edit_quality).pack(side='right')
         ttk.Button(row,text='보드 설정…',command=self.open_setup).pack(side='right',padx=(0,8))
-        ttk.Scale(frame,from_=0,to=100,variable=self.volume,command=lambda _:self.controls()).pack(fill='x')
+        ttk.Scale(frame,from_=0,to=100,variable=self.volume,command=lambda _:self.volume_moved()).pack(fill='x')
         row=ttk.Frame(frame);row.pack(fill='x',pady=12)
         self.button=ttk.Button(row,text='연결 시작',command=self.toggle);self.button.pack(side='left',expand=True,fill='x')
         self.refresh_button=ttk.Button(row,text='장치 새로고침',command=self.refresh);self.refresh_button.pack(side='left',padx=(10,0))
@@ -86,6 +89,22 @@ class App:
     def controls(self):
         if self.client:
             self.client.mic_muted=self.mute.get();self.client.return_muted=self.deafen.get();self.client.output_gain=self.volume.get()/100
+
+    def volume_moved(self):
+        # Linked with the board: the slider sets the board's listening level (the phone's volume until then).
+        self.controls()
+        if self.client and self.client.active and self.client.listening.linked:
+            self.client.listening.set(slider_db(self.volume.get()),time.monotonic())
+
+    def show_level(self):
+        level=self.client.listening if self.client else None
+        if not (level and level.linked):
+            self.volume_label.set('듣기 크기');self.level_shown=None;return
+        # Follow the board (a phone volume change) unless our own change is still on its way.
+        if not level.pending and level.changes!=self.level_shown:
+            self.volume.set(slider_position(level.db));self.level_shown=level.changes
+        where=' · PC에서 바꿈' if level.by_pc else (' · 폰 볼륨' if level.phone_sets else '')
+        self.volume_label.set('듣기 크기 · 무음'+where if level.db is None else f'듣기 크기 · {level.db:.1f} dB'+where)
 
     def edit_quality(self):
         def apply(value):
@@ -129,6 +148,8 @@ class App:
                 'listen_frames_added':c.level.added,'listen_step':c.level.adjust,
                 'outbound_quality':c.quality.to_dict(),'aac_processing':c.quality_report,
                 'aac_queue_drops':c.quality_drops,'send_queue_underruns':c.send_underruns,
+                'listening_level':{'linked':c.listening.linked,'db':c.listening.db,'set_by_pc':c.listening.by_pc,
+                                   'phone_sets_volume':c.listening.phone_sets},
                 'board_status':self.board.report()}
         try:Path(path).write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
         except OSError as error:messagebox.showerror('진단 저장',str(error))
@@ -142,6 +163,7 @@ class App:
         self.buffer.configure(state='disabled' if active else 'readonly')
         for widget in [self.input,self.output]:widget.configure(state='disabled' if active else 'readonly')
         self.refresh_button.configure(state='disabled' if active else 'normal')
+        self.show_level()
         if self.client:
             c=self.client;self.status.set(c.status)
             if active and c.quality.mode=='aac':

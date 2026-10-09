@@ -1,7 +1,8 @@
 import struct
 import heapq
 import unittest
-from protocol import HEADER, LevelReader, ReturnBuffer, microphone
+from protocol import (HEADER, LEVEL_COMMAND, LEVEL_STATE, SILENT, LevelReader, ListeningLevel, ReturnBuffer,
+                      level_command, microphone, slider_db, slider_position)
 
 
 class ProtocolTests(unittest.TestCase):
@@ -107,6 +108,57 @@ class LevelReaderTests(unittest.TestCase):
         for seq in range(4): b.push(HEADER.pack(b'VSR1', 7, seq, 480, 0) + b'\x34\x12' * 480, 1.0)
         self.assertEqual(level.read(1.0), b'\x34\x12' * 480)
         self.assertEqual((level.adjust, level.removed, level.added), (0, 0, 0))
+
+
+class ListeningLevelTests(unittest.TestCase):
+    def state(self, raw, flags=2, changes=5, command=0):
+        return LEVEL_STATE.pack(b'VSV1', raw, flags, changes, command)
+
+    def test_command_packet(self):
+        self.assertEqual(level_command(7, -20.86, 9), LEVEL_COMMAND.pack(b'VSL1', 7, -5340, 0, 9))
+        self.assertEqual(len(level_command(7, None, 9)), 16)
+        self.assertEqual(LEVEL_COMMAND.unpack(level_command(7, None, 9))[2], SILENT)
+        self.assertEqual(LEVEL_COMMAND.unpack(level_command(7, 6, 9))[2], 0)          # never above 0 dB
+        self.assertEqual(LEVEL_COMMAND.unpack(level_command(7, -200, 9))[2], -32767)  # very quiet, not silent
+
+    def test_slider_maps_two_positions_a_db(self):
+        self.assertIsNone(slider_db(0))
+        self.assertEqual((slider_db(100), slider_db(80), slider_db(1)), (0, -10, -49.5))
+        self.assertEqual((slider_position(None), slider_position(0), slider_position(-20.86)), (0, 100, 58.28))
+        self.assertEqual(slider_position(-60), 0)
+        for position in (1, 14.5, 58, 100):
+            self.assertAlmostEqual(slider_position(slider_db(position)), position)
+
+    def test_report_links_and_follows_the_board(self):
+        level = ListeningLevel()
+        self.assertFalse(level.linked)
+        self.assertFalse(level.state(b'VSA2' + bytes(20)))
+        self.assertFalse(level.state(self.state(0)[:15]))
+        self.assertTrue(level.state(self.state(-5339)))
+        self.assertTrue(level.linked and level.phone_sets and not level.by_pc)
+        self.assertAlmostEqual(level.db, -20.855, places=3)
+        self.assertTrue(level.state(self.state(SILENT, flags=3, changes=6)))
+        self.assertIsNone(level.db); self.assertTrue(level.by_pc); self.assertEqual(level.changes, 6)
+
+    def test_command_resent_until_echoed_then_given_up(self):
+        level = ListeningLevel()
+        level.set(-10, now=1.0)
+        command, db = level.due(1.0)
+        self.assertEqual(db, -10)
+        self.assertIsNone(level.due(1.05))                      # not before RESEND
+        self.assertEqual(level.due(1.11), (command, -10))      # resent
+        level.state(self.state(-2560, flags=3, command=command - 1 & 0xffffffff))
+        self.assertTrue(level.pending)                          # an older echo does not confirm it
+        level.state(self.state(-2560, flags=3, command=command))
+        self.assertFalse(level.pending); self.assertIsNone(level.due(2.0))
+        level.set(-12, now=3.0)
+        self.assertEqual(level.due(3.0)[0], command + 1 & 0xffffffff)
+        self.assertIsNone(level.due(3.0 + ListeningLevel.GIVE_UP + .01))
+        self.assertFalse(level.pending)
+
+    def test_ids_differ_between_connections(self):
+        # The board ignores a repeat of the last id it took, so a new connection must not start from it.
+        self.assertNotEqual(ListeningLevel().command, ListeningLevel().command)
 
 
 if __name__=='__main__':unittest.main()
