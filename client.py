@@ -10,7 +10,7 @@ import time
 import sys
 import numpy as np
 import sounddevice as sd
-from protocol import ReturnBuffer, microphone
+from protocol import LevelReader, ReturnBuffer, microphone
 from audio_format import endpoint_format, PCMConverter
 from audio_quality import QualitySettings, AACProcessor
 
@@ -21,6 +21,7 @@ class HeadsetClient:
         self.host, self.input_device, self.output_device = host, input_device, output_device
         self.session = secrets.randbelow(2**32 - 1) + 1
         self.returns = ReturnBuffer(self.session, buffer_ms)
+        self.level = LevelReader(self.returns)   # plays the device's sound at the pace it arrives
         self.captured = queue.Queue(maxsize=20)
         self.quality = quality or QualitySettings()
         self.outbound = queue.Queue(maxsize=20) if self.quality.mode == 'aac' else self.captured
@@ -72,7 +73,7 @@ class HeadsetClient:
         data.fill(0)
         mono = self.playback_converter.pop(frames)
         while mono is None:
-            pcm = self.returns.read()
+            pcm = self.level.read()
             self.playback_converter.push(np.frombuffer(pcm, dtype='<i2'))
             mono = self.playback_converter.pop(frames)
         if not self.return_muted:

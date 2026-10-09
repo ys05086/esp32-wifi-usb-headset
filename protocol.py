@@ -3,6 +3,8 @@ import struct
 import threading
 import time
 
+import numpy as np
+
 FRAMES = 480
 PCM_BYTES = 960
 HEADER = struct.Struct('<4sIIHH')
@@ -12,6 +14,64 @@ def microphone(session, sequence, pcm, stop=False):
     if not session or (len(pcm) != (0 if stop else PCM_BYTES)):
         raise ValueError('Invalid microphone packet')
     return HEADER.pack(b'VSM1', session, sequence, 0 if stop else FRAMES, 1 if stop else 2) + pcm
+
+
+class LevelReader:
+    """Plays a ReturnBuffer at the pace the device actually sends, as the board does for its microphone.
+
+    A USB host that sends 1% fewer packets (an iPhone did: 982 a second) empties a fixed buffer once a second,
+    10 ms of silence each time. Once a second this measures the device's surplus from the buffer's mean level,
+    then reads that many frames more or fewer than it plays (plus a quarter of the way from the second's lowest
+    level to 3/4 of the chosen buffer), at most MAX_ADJUST per 480 (2.5%), by linear interpolation. With no
+    drift it is a plain copy. Only the audio callback calls read().
+    """
+    MAX_ADJUST = 12
+    WINDOW = 100      # reads per decision, ~1 s
+
+    def __init__(self, returns):
+        self.returns = returns
+        self.target = returns.target_blocks * FRAMES * 3 // 4
+        self.pending = np.zeros(0, np.int16)
+        self.adjust, self.rate = 0, 0.0
+        self.removed = self.added = 0
+        self._restart()
+
+    def _restart(self):
+        self.reads, self.window_min, self.window_sum, self.last_mean, self.adjust = 0, None, 0, None, 0
+
+    @property
+    def rate_ppm(self):
+        return self.rate * 1e6 / 48000
+
+    def read(self, now=None):
+        if not self.returns.primed:            # filling or refilling: silence, and no rate from this stretch
+            self.pending = np.zeros(0, np.int16)
+            self._restart()
+            return self.returns.read(now)
+        take = FRAMES + self.adjust
+        while len(self.pending) < take + 1:  # the next block's first frame for the last interpolation
+            self.pending = np.concatenate((self.pending, np.frombuffer(self.returns.read(now), '<i2')))
+        if take == FRAMES:
+            out = self.pending[:FRAMES].copy()
+        else:
+            where = np.arange(FRAMES) * (take / FRAMES)
+            out = np.round(np.interp(where, np.arange(take + 1), self.pending[:take + 1])).astype(np.int16)
+            if take > FRAMES: self.removed += take - FRAMES
+            else: self.added += FRAMES - take
+        self.pending = self.pending[take:]
+        level = self.returns.queued_frames + len(self.pending)
+        self.window_min = level if self.window_min is None else min(self.window_min, level)
+        self.window_sum += level
+        self.reads += 1
+        if self.reads == self.WINDOW:
+            mean = self.window_sum / self.WINDOW
+            if self.last_mean is not None:
+                self.rate += ((mean - self.last_mean) + self.adjust * self.WINDOW - self.rate) / 4
+            self.last_mean = mean
+            want = self.rate + (self.window_min - self.target) / 4
+            self.adjust = int(max(-self.MAX_ADJUST, min(self.MAX_ADJUST, round(want / self.WINDOW))))
+            self.reads, self.window_min, self.window_sum = 0, None, 0
+        return out.astype('<i2').tobytes()
 
 
 class ReturnBuffer:
@@ -32,6 +92,10 @@ class ReturnBuffer:
     @property
     def queued_ms(self):
         with self.lock: return len(self.blocks) * 10
+
+    @property
+    def queued_frames(self):
+        with self.lock: return len(self.blocks) * FRAMES
 
     def push(self, data, now=None):
         now = time.monotonic() if now is None else now

@@ -55,7 +55,7 @@ static void drift(double ppm, unsigned jitter_ms, unsigned burst, unsigned secon
            "cap trims %u, underruns %u, largest step %d\n", ppm, jitter_ms, burst, settled_at/100.0, low/48, high/48,
            s.squeezed, s.stretched, s.dropped, s.underruns, worst);
     assert(s.dropped==0 && s.underruns==0);  // no 80 ms cuts, no gaps
-    assert(worst<=502);                      // triangle slope 500 * 481/480, plus rounding: no click anywhere
+    assert(worst<=500+(500*PCM_MAX_ADJUST+479)/480+2);  // triangle slope at the largest step, plus rounding: no click
     assert(settled_at && low>=PCM_LOW_FRAMES-960 && high<=PCM_HIGH_FRAMES+480+jitter_ms*48+480);
 }
 
@@ -85,11 +85,11 @@ int main(void) {
     assert(s.adjust==0);
     for(int i=0;i<480;i++)assert((int16_t)(out[2*i]|out[2*i+1]<<8)==tri((uint64_t)i));
     // one frame more or fewer: still the triangle, with no step larger than its slope
-    int16_t raw[PCM_PACKET_FRAMES+2];
-    for(size_t taken=479;taken<=481;taken++) {
+    int16_t raw[PCM_RAW_FRAMES];
+    for(size_t taken=480-PCM_MAX_ADJUST;taken<=480+PCM_MAX_ADJUST;taken++) {
         for(size_t i=0;i<=taken;i++)raw[i]=(int16_t)tri(i);
         wifi_pcm_render(raw,taken,out,480);
-        for(int i=1;i<480;i++){int a=(int16_t)(out[2*i-2]|out[2*i-1]<<8),b=(int16_t)(out[2*i]|out[2*i+1]<<8);assert(abs(b-a)<=502);}
+        for(int i=1;i<480;i++){int a=(int16_t)(out[2*i-2]|out[2*i-1]<<8),b=(int16_t)(out[2*i]|out[2*i+1]<<8);assert(abs(b-a)<=500+(500*PCM_MAX_ADJUST+479)/480+2);}
     }
 
     // The host stops reading for 3 s (stream closed and opened again) while audio keeps arriving: it starts
@@ -115,5 +115,11 @@ int main(void) {
     drift(1500,20,0,1800);
     drift(-1500,20,0,1800);
     drift(150,10,16,1800);  // 160 ms queued before the first read, as several captures had: flushed at once
+    // 2026-10-09: the iPhone polled the microphone 988 times a second, 1.2% short; the old 0.2% step cut 73 ms
+    // every 8 s. Up to 2% either way now, with Wi-Fi jitter.
+    drift(12000,20,0,1800);
+    drift(-12000,20,0,1800);
+    drift(20000,20,0,1800);
+    drift(-20000,20,0,1800);
     return 0;
 }

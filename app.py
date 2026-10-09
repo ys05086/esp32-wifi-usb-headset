@@ -125,6 +125,8 @@ class App:
                 'capture_device_errors':c.capture_errors,'playback_device_errors':c.playback_errors,
                 'sent':c.sent,'board_received':c.board_received,'board_mic_underruns':c.board_underruns,
                 'board_return_drops':c.board_return_drops,'capture_queue_drops':c.input_drops,
+                'listen_rate_ppm':round(c.level.rate_ppm),'listen_frames_removed':c.level.removed,
+                'listen_frames_added':c.level.added,'listen_step':c.level.adjust,
                 'outbound_quality':c.quality.to_dict(),'aac_processing':c.quality_report,
                 'aac_queue_drops':c.quality_drops,'send_queue_underruns':c.send_underruns,
                 'board_status':self.board.report()}
@@ -146,7 +148,7 @@ class App:
                 wait=c.quality_report.get('pending_ms',0)+c.outbound.qsize()*10+c.captured.qsize()*10
                 self.quality_label.set(f'{c.quality.label} · AAC/송신 대기 약 {wait:.0f} ms\n추가 대기 추정치이며 전체 지연은 아니에요. · 송신 부족 {c.send_underruns} · AAC 버림 {c.quality_drops}')
             else:self.quality_label.set(self.quality.label)
-            self.stats.set(f'입력 {c.input_rate} Hz → 전송 48000 Hz → 출력 {c.output_rate} Hz\n송신: 보냄 {c.sent} · 보드 수신 {c.board_received} · 보드 버퍼 부족 {c.board_underruns}\n듣기: 수신 {c.returns.received} · 버퍼 {c.returns.queued_ms} ms · 누락 {c.returns.lost}\n듣기 버퍼 부족 {c.returns.underruns} · 출력 장치 오류 {c.playback_errors} · 입력 버림 {c.input_drops}')
+            self.stats.set(f'입력 {c.input_rate} Hz → 전송 48000 Hz → 출력 {c.output_rate} Hz\n송신: 보냄 {c.sent} · 보드 수신 {c.board_received} · 보드 버퍼 부족 {c.board_underruns}\n듣기: 수신 {c.returns.received} · 버퍼 {c.returns.queued_ms} ms · 누락 {c.returns.lost}\n듣기 버퍼 부족 {c.returns.underruns} · 출력 장치 오류 {c.playback_errors} · 입력 버림 {c.input_drops}\n듣기 속도 보정 {c.level.rate_ppm:+.0f} ppm (−{c.level.removed}/+{c.level.added} 프레임)')
         self.root.after(250,self.poll)
 
     def close(self):

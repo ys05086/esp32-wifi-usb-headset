@@ -58,7 +58,7 @@ static const char page[] =
 
 void wifi_bridge_read(uint8_t *out, size_t bytes) {
     // Only the UAC microphone task calls this. The copy runs under the lock, the interpolation outside it.
-    static int16_t raw[PCM_PACKET_FRAMES + 2];
+    static int16_t raw[PCM_RAW_FRAMES];
     for (size_t done = 0, total = bytes/2; done < total; ) {
         size_t frames = total - done < PCM_PACKET_FRAMES ? total - done : PCM_PACKET_FRAMES;
         portENTER_CRITICAL(&pcm_lock);
@@ -217,6 +217,9 @@ static esp_err_t status_get(httpd_req_t *req) {
     cJSON_AddNumberToObject(root,"input_level_removed_frames",squeezed);
     cJSON_AddNumberToObject(root,"input_level_added_frames",stretched);
     cJSON_AddNumberToObject(root,"input_level_step",adjust);
+    // the sender's surplus against the USB host as the level control sees it, in ppm (+: sender faster)
+    int32_t rate;portENTER_CRITICAL(&pcm_lock);rate=pcm.rate;portEXIT_CRITICAL(&pcm_lock);
+    cJSON_AddNumberToObject(root,"input_rate_ppm",(double)rate*1e6/48000);
     // backlog skipped when the USB host (re)started reading, before anything played
     cJSON_AddNumberToObject(root,"input_start_flushed_frames",flushed);
     uint32_t partial,stale,invalid;
