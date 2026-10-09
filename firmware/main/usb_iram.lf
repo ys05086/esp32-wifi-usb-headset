@@ -1,0 +1,27 @@
+# The USB interrupt path runs from IRAM, not flash. Both cores share one 16 KB instruction cache, and with Wi-Fi
+# busy on core 0 the interrupt's code was evicted between runs: each run then re-read it from the 40 MHz DIO
+# flash, a few microseconds per cache line, and a run took up to 1.2 ms (over 150 us about 700 times a second
+# while both directions streamed). The speaker endpoint is re-armed inside that run, so a slow one missed the
+# next OUT packet (38 a second). In the interrupt: TinyUSB's DWC2 driver, the device core and the audio class
+# (packet completion, re-arm, FIFOs), the UAC callbacks it calls, and the diagnostics hooks.
+
+[mapping:usb_isr_tinyusb]
+archive: libespressif__tinyusb.a
+entries:
+    dcd_dwc2 (noflash)
+    dwc2_common (noflash)
+    usbd (noflash)
+    audio_device (noflash)
+    tusb_fifo (noflash)
+    tusb (noflash)
+
+[mapping:usb_isr_uac]
+archive: libespressif__usb_device_uac.a
+entries:
+    usb_device_uac (noflash)
+
+[mapping:usb_isr_main]
+archive: libmain.a
+entries:
+    usb_diagnostics (noflash)
+    usb_mic_trace (noflash)
