@@ -20,6 +20,8 @@ typedef struct {
     // chunks, all-zero chunks, all-zero chunks right after sound, chunks lost to a full handoff queue,
     // and stream restarts (a 10 ms gap between packets clears the FIFO and waits for 5 ms of data).
     uint32_t spk_chunks, spk_zero_chunks, spk_zero_after_sound, spk_queue_full, spk_restarts;
+    // the most chunks waiting when the speaker task took one, and how often more than 8 were (the old depth)
+    uint32_t spk_backlog_max, spk_backlog_over8;
     uint32_t event_count;          // every event so far; the ring keeps the last VS_USB_EVENTS
     vs_usb_event_t events[VS_USB_EVENTS];
     bool mic_active, speaker_active;
@@ -31,4 +33,5 @@ void vs_usb_diag_retry(unsigned ep_addr);
 void vs_usb_diag_mic_prefill(bool recovered);
 void vs_usb_diag_speaker_chunk(const uint8_t *data, unsigned size, bool queued);   // USB ISR
 void vs_usb_diag_speaker_restart(void);                                              // USB ISR
+void vs_usb_diag_speaker_backlog(unsigned waiting);                                  // speaker task
 vs_usb_stats_t vs_usb_diag_snapshot(void);

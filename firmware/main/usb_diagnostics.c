@@ -39,6 +39,13 @@ void vs_usb_diag_speaker_restart(void) {
     portEXIT_CRITICAL(&lock);
 }
 
+void vs_usb_diag_speaker_backlog(unsigned waiting) {
+    portENTER_CRITICAL(&lock);
+    if (waiting > stats.spk_backlog_max) stats.spk_backlog_max = waiting;
+    if (waiting > 8) stats.spk_backlog_over8++;
+    portEXIT_CRITICAL(&lock);
+}
+
 void vs_usb_diag_retry(unsigned ep_addr) {
     // Board descriptors: 0x82 microphone, 0x81 speaker feedback.
     if (ep_addr != 0x82 && ep_addr != 0x81) return;

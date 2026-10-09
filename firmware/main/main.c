@@ -3,6 +3,7 @@
 #include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 #include "driver/gpio.h"
 #include "driver/uart.h"
 #include "esp_log.h"
@@ -48,6 +49,13 @@ static esp_err_t microphone(uint8_t *buf, size_t len, size_t *bytes_read, void *
     return ESP_OK;
 }
 
+static void start_wifi(void *done)
+{
+    wifi_bridge_init();
+    xSemaphoreGive((SemaphoreHandle_t)done);
+    vTaskDelete(NULL);
+}
+
 static esp_err_t speaker(uint8_t *buf, size_t len, void *ctx)
 {
     (void)ctx;
@@ -76,7 +84,15 @@ void app_main(void)
     usb_profile_init();
     uac_device_config_t uac = {.input_cb = microphone, .output_cb = speaker};
     ESP_ERROR_CHECK(uac_device_init(&uac));
-    wifi_bridge_init();
+    // Wi-Fi allocates its interrupt on the core that starts it, and lwIP/UDP/HTTP run there too: start it
+    // from core 0, so core 1 is left to the USB interrupt and the audio tasks. Sharing core 1 cost USB
+    // speaker packets (re-armed late) and speaker chunks (task held up past its queue).
+    SemaphoreHandle_t wifi_ready = xSemaphoreCreateBinary();
+    ESP_ERROR_CHECK(wifi_ready ? ESP_OK : ESP_ERR_NO_MEM);
+    ESP_ERROR_CHECK(xTaskCreatePinnedToCore(start_wifi, "wifi_start", 6144, wifi_ready, 5, NULL, 0) == pdPASS
+                    ? ESP_OK : ESP_ERR_NO_MEM);
+    xSemaphoreTake(wifi_ready, portMAX_DELAY);
+    vSemaphoreDelete(wifi_ready);
     ESP_LOGI(TAG, "READY: ESP32 Wi-Fi Headset; 48000 Hz / PCM16; mono mic, stereo speaker");
     ESP_LOGI(TAG, "BOOT/UART 't': finite probe override. Otherwise: Wi-Fi PCM to USB, silence on disconnect.");
     ESP_LOGI(TAG, "Setup on this port: @get, @set {json}, @new-password, @reboot, @help");
@@ -110,8 +126,9 @@ void app_main(void)
             portENTER_CRITICAL(&lock);
             blocks = usb_blocks;
             max_us = callback_max_us;
+            callback_max_us = 0;
             portEXIT_CRITICAL(&lock);
-            ESP_LOGI(TAG, "USB microphone callbacks: %"PRIu32 "; max render: %"PRIu32 " us / 10000 us budget", blocks, max_us);
+            ESP_LOGI(TAG, "USB microphone callbacks: %"PRIu32 "; max render in the last 10 s: %"PRIu32 " us / 10000 us budget", blocks, max_us);
             last_report = now;
         }
         vTaskDelay(pdMS_TO_TICKS(5));

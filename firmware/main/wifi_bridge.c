@@ -22,6 +22,7 @@
 #include "usb_mic_trace.h"
 #include "board_config.h"
 #include <stdlib.h>
+#include "esp_system.h"
 
 static const char *TAG = "wifi_pcm";
 static wifi_pcm_t pcm;
@@ -226,7 +227,7 @@ static esp_err_t status_get(httpd_req_t *req) {
     cJSON *usb=cJSON_AddObjectToObject(root,"usb");
     if(!usb){cJSON_Delete(root);return httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"Diagnostic allocation failed");}
     vs_usb_stats_t stats=vs_usb_diag_snapshot();
-    cJSON_AddNumberToObject(usb,"version",6);
+    cJSON_AddNumberToObject(usb,"version",7);
     cJSON_AddNumberToObject(usb,"uptime_ms",(double)(uint32_t)(esp_timer_get_time()/1000));
     cJSON_AddNumberToObject(usb,"mic_prefill_attempts",stats.mic_prefill_attempts);
     cJSON_AddNumberToObject(usb,"mic_prefill_recovered",stats.mic_prefill_recovered);
@@ -239,6 +240,10 @@ static esp_err_t status_get(httpd_req_t *req) {
     cJSON_AddNumberToObject(usb,"speaker_zero_after_sound",stats.spk_zero_after_sound);
     cJSON_AddNumberToObject(usb,"speaker_queue_full",stats.spk_queue_full);
     cJSON_AddNumberToObject(usb,"speaker_restarts",stats.spk_restarts);
+    cJSON_AddNumberToObject(usb,"speaker_backlog_max",stats.spk_backlog_max);
+    cJSON_AddNumberToObject(usb,"speaker_backlog_over8",stats.spk_backlog_over8);
+    cJSON_AddNumberToObject(root,"free_heap",esp_get_free_heap_size());
+    cJSON_AddNumberToObject(root,"min_free_heap",esp_get_minimum_free_heap_size());
     const char *names[]={"mic","speaker","feedback"};
     for(unsigned i=0;i<3;i++){
         cJSON *ep=cJSON_AddObjectToObject(usb,names[i]);
@@ -366,6 +371,7 @@ void wifi_bridge_init(void) {
     if(configured)ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA,&sta));
     ESP_ERROR_CHECK(esp_wifi_start());ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_NONE));
     httpd_handle_t server;httpd_config_t config=HTTPD_DEFAULT_CONFIG();config.stack_size=6144;
+    config.core_id=0;   // network work stays off the USB audio core
     // HTTPD reserves three sockets; leave capacity for UDP audio and new accepts.
     // Browser/status clients may retain idle connections across polls.
     config.max_open_sockets=4;
@@ -377,6 +383,6 @@ void wifi_bridge_init(void) {
     ESP_ERROR_CHECK(httpd_register_uri_handler(server,&root));ESP_ERROR_CHECK(httpd_register_uri_handler(server,&status));ESP_ERROR_CHECK(httpd_register_uri_handler(server,&setup));
     httpd_uri_t usb_mode={.uri="/usb-mode",.method=HTTP_POST,.handler=usb_mode_post};
     ESP_ERROR_CHECK(httpd_register_uri_handler(server,&usb_mode));
-    ESP_ERROR_CHECK(xTaskCreate(udp_task,"wifi_pcm",8192,NULL,4,NULL)==pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
+    ESP_ERROR_CHECK(xTaskCreatePinnedToCore(udp_task,"wifi_pcm",8192,NULL,4,NULL,0)==pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
     ESP_LOGI(TAG,"READY: board Wi-Fi %s (password: setup program, or @get on COM) ; setup http://192.168.4.1 ; PCM UDP 49152",board_ap_ssid());
 }

@@ -79,7 +79,9 @@ AS_NEW = '#define CFG_TUD_AUDIO_FUNC_1_N_AS_INT             ((MIC_CHANNEL_NUM > 
 SPEAKER_PATCHES = [
     ('static uac_device_t *s_uac_device = NULL;', '''static uac_device_t *s_uac_device = NULL;
 #include "freertos/queue.h"
-typedef struct { size_t size; uint8_t data[CFG_TUD_AUDIO_FUNC_1_EP_OUT_SW_BUF_SZ]; } vs_speaker_block_t;
+// One packet (192 bytes) per chunk; the first read after a stream restart takes half the FIFO (<= 980).
+typedef struct { size_t size; uint8_t data[1024]; } vs_speaker_block_t;
+_Static_assert(SPK_INTERVAL_MS * CFG_TUD_AUDIO_FUNC_1_FORMAT_1_EP_SZ_OUT / 2 <= 1024, "speaker chunk too small");
 static QueueHandle_t vs_speaker_queue;'''),
     ('''    s_uac_device->spk_data_size = tud_audio_n_read(func_id, s_uac_device->spk_buf, bytes_require);
     xTaskNotifyGive(s_uac_device->spk_task_handle);''', '''    static vs_speaker_block_t block; // USB ISR owns the producer buffer.
@@ -108,7 +110,7 @@ static QueueHandle_t vs_speaker_queue;'''),
             s_uac_device->user_cfg.output_cb(block.data, block.size, s_uac_device->user_cfg.cb_ctx);
         }'''),
     ('    BaseType_t ret_val;', '''    BaseType_t ret_val;
-    vs_speaker_queue = xQueueCreate(8, sizeof(vs_speaker_block_t));
+    vs_speaker_queue = xQueueCreate(24, sizeof(vs_speaker_block_t));   // 24 ms of packets
     ESP_RETURN_ON_FALSE(vs_speaker_queue != NULL, ESP_ERR_NO_MEM, TAG, "Speaker queue allocation failed");'''),
 ]
 
@@ -158,6 +160,10 @@ SPEAKER_DIAG_PATCHES = [
     ('            xQueueSend(vs_speaker_queue, &block, 0);',
      '            extern void vs_usb_diag_speaker_chunk(const uint8_t *data, unsigned size, bool queued);\n'
      '            vs_usb_diag_speaker_chunk(block.data, block.size, xQueueSend(vs_speaker_queue, &block, 0) == pdTRUE);'),
+    ('        if (xQueueReceive(vs_speaker_queue, &block, pdMS_TO_TICKS(20)) != pdTRUE) continue;',
+     '        if (xQueueReceive(vs_speaker_queue, &block, pdMS_TO_TICKS(20)) != pdTRUE) continue;\n'
+     '        extern void vs_usb_diag_speaker_backlog(unsigned waiting);\n'
+     '        vs_usb_diag_speaker_backlog(uxQueueMessagesWaiting(vs_speaker_queue) + 1);'),
     ('        new_play = true;\n        tud_audio_n_clear_ep_out_ff(func_id);',
      '        new_play = true;\n        extern void vs_usb_diag_speaker_restart(void);\n        vs_usb_diag_speaker_restart();\n'
      '        tud_audio_n_clear_ep_out_ff(func_id);'),
