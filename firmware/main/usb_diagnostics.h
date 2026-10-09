@@ -32,6 +32,11 @@ typedef struct {
     // lost right after such a late re-arm.
     uint32_t arm_gaps[3], arm_gap_events[3];
     uint32_t out_missed, out_late_arms, out_missed_after_late;
+    // USB interrupt timing while audio streams, maxima since the last status read: its longest run, the
+    // longest stretch it did not run (it runs several times a millisecond while streaming, so a gap well over
+    // 1 ms is the interrupt held off), and the delay from a speaker packet's arrival to its re-arm.
+    uint32_t isr_max_us, isr_over150, isr_gap_max_us, isr_gaps_over1100;
+    uint32_t rearm_max_us, rearm_hist[5];   // re-arm delay: <250, <500, <750, <1000, >=1000 us
     uint32_t event_count;          // every event so far; the ring keeps the last VS_USB_EVENTS
     vs_usb_event_t events[VS_USB_EVENTS];
     bool mic_active, speaker_active;
@@ -45,5 +50,7 @@ void vs_usb_diag_speaker_chunk(const uint8_t *data, unsigned size, bool queued);
 void vs_usb_diag_speaker_restart(void);                                              // USB ISR
 void vs_usb_diag_speaker_backlog(unsigned waiting);                                  // speaker task
 void vs_usb_diag_out_rx(unsigned frame4);                                            // USB ISR
+void vs_usb_diag_isr_enter(void);                                                    // USB ISR
+void vs_usb_diag_isr_exit(void);                                                     // USB ISR
 void vs_usb_diag_iso_arm(unsigned epnum, unsigned dir, unsigned frame);              // USB ISR / task
 vs_usb_stats_t vs_usb_diag_snapshot(void);

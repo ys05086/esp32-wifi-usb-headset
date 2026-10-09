@@ -52,6 +52,30 @@ static int iso_index(unsigned epnum, unsigned dir) {
     return epnum == 2 ? 1 : epnum == 1 ? 2 : -1;
 }
 
+static int64_t isr_entered, isr_left, out_rx_us;
+
+void vs_usb_diag_isr_enter(void) {
+    int64_t now = esp_timer_get_time();
+    portENTER_CRITICAL(&lock);
+    if (isr_left && (stats.mic_active || stats.speaker_active)) {
+        uint32_t gap = (uint32_t)(now - isr_left);
+        if (gap > stats.isr_gap_max_us) stats.isr_gap_max_us = gap;
+        if (gap > 1100) stats.isr_gaps_over1100++;
+    }
+    isr_entered = now;
+    portEXIT_CRITICAL(&lock);
+}
+
+void vs_usb_diag_isr_exit(void) {
+    int64_t now = esp_timer_get_time();
+    portENTER_CRITICAL(&lock);
+    uint32_t ran = (uint32_t)(now - isr_entered);
+    if (ran > stats.isr_max_us) stats.isr_max_us = ran;
+    if (ran > 150) stats.isr_over150++;
+    isr_left = now;
+    portEXIT_CRITICAL(&lock);
+}
+
 static unsigned out_last_rx = 0x100;   // 4 LSBs of the frame of the last OUT packet; 0x100: none yet
 static bool out_late;                  // the re-arm after that packet ran in a later frame
 
@@ -66,6 +90,7 @@ void vs_usb_diag_out_rx(unsigned frame4) {
     }
     out_last_rx = frame4 & 15u;
     out_late = false;
+    out_rx_us = esp_timer_get_time();
     portEXIT_CRITICAL(&lock);
 }
 
@@ -80,6 +105,12 @@ void vs_usb_diag_iso_arm(unsigned epnum, unsigned dir, unsigned frame) {
     }
     last[i] = frame & 0x3FFFu;
     if (i == 0 && out_last_rx != 0x100 && ((frame - out_last_rx) & 15u) >= 1) { stats.out_late_arms++; out_late = true; }
+    if (i == 0 && out_rx_us) {
+        uint32_t delay = (uint32_t)(esp_timer_get_time() - out_rx_us);
+        if (delay > stats.rearm_max_us) stats.rearm_max_us = delay;
+        stats.rearm_hist[delay < 250 ? 0 : delay < 500 ? 1 : delay < 750 ? 2 : delay < 1000 ? 3 : 4]++;
+        out_rx_us = 0;
+    }
     portEXIT_CRITICAL(&lock);
 }
 
@@ -130,6 +161,7 @@ void vs_usb_diag_feedback(unsigned value, unsigned bytes) {
 vs_usb_stats_t vs_usb_diag_snapshot(void) {
     portENTER_CRITICAL(&lock);
     vs_usb_stats_t result = stats;
+    stats.isr_max_us = stats.isr_gap_max_us = stats.rearm_max_us = 0;   // maxima per status read
     portEXIT_CRITICAL(&lock);
     return result;
 }

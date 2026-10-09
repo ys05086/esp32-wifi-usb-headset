@@ -63,10 +63,12 @@ DWC_DIAG_PATCHES = [
   uint16_t iso_frame;       // Headset: the frame this isochronous endpoint was last armed for
   bool iso_frame_valid;
 } xfer_ctl_t;"""),
-    # The fix. An endpoint is armed for the frame after the current one. When the interrupt that re-arms it
-    # runs just after the SOF of the frame following the one it last served (the microphone's IN work is
-    # handled first, and the speaker's packet comes late in the frame), that skips a frame and its packet:
-    # 1.5-2% lost while both directions stream, none with the speaker alone. Arm that frame instead.
+    # The fix, IN only. An endpoint is armed for the frame after the current one. When the interrupt that
+    # re-arms the microphone runs just after the SOF of the frame following the one it last served, that
+    # skipped a frame (1.5% of microphone packets lost while both directions streamed). Arm that frame
+    # instead: the host asks for IN later in it (with it, 1000 packets/s). Not for OUT: an iPhone sends the
+    # speaker packet early in the frame, so a late OUT re-arm has already missed it, and arming that frame
+    # cost the next one too.
     ("""  if (depctl.type == DEPCTL_EPTYPE_ISOCHRONOUS) {
     const dwc2_dsts_t dsts = {.value = dwc2->dsts};
     const uint32_t odd_now = dsts.frame_number & 1u;
@@ -79,8 +81,8 @@ DWC_DIAG_PATCHES = [
     const dwc2_dsts_t dsts = {.value = dwc2->dsts};
     const uint32_t now = dsts.frame_number;
     uint32_t target = (now + 1u) & 0x3FFFu;
-    if (xfer->iso_frame_valid && ((xfer->iso_frame + 1u) & 0x3FFFu) == now) {
-      target = now;   // re-armed after that frame's SOF: its packet is still to come
+    if (dir == TUSB_DIR_IN && xfer->iso_frame_valid && ((xfer->iso_frame + 1u) & 0x3FFFu) == now) {
+      target = now;   // re-armed after that frame's SOF: the host has yet to ask
     }
     xfer->iso_frame = (uint16_t) target;
     xfer->iso_frame_valid = true;
@@ -92,6 +94,18 @@ DWC_DIAG_PATCHES = [
       depctl.set_data0_iso_even = 1;
     }
   }"""),
+    ("""void dcd_int_handler(uint8_t rhport) {
+  dwc2_regs_t* dwc2 = DWC2_REG(rhport);""", """void dcd_int_handler(uint8_t rhport) {
+  extern void vs_usb_diag_isr_enter(void);
+  vs_usb_diag_isr_enter();
+  dwc2_regs_t* dwc2 = DWC2_REG(rhport);"""),
+    ("""    handle_incomplete_iso_in(rhport);
+  }
+}""", """    handle_incomplete_iso_in(rhport);
+  }
+  extern void vs_usb_diag_isr_exit(void);
+  vs_usb_diag_isr_exit();
+}"""),
     # The IN retry re-arms for the next frame by itself: keep the record in step.
     ("""        if (odd_now) {
           depctl.set_data0_iso_even = 1;

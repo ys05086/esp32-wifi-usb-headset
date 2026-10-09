@@ -230,7 +230,7 @@ static esp_err_t status_get(httpd_req_t *req) {
     cJSON *usb=cJSON_AddObjectToObject(root,"usb");
     if(!usb){cJSON_Delete(root);return httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"Diagnostic allocation failed");}
     vs_usb_stats_t stats=vs_usb_diag_snapshot();
-    cJSON_AddNumberToObject(usb,"version",9);
+    cJSON_AddNumberToObject(usb,"version",10);
     cJSON_AddNumberToObject(usb,"uptime_ms",(double)(uint32_t)(esp_timer_get_time()/1000));
     cJSON_AddNumberToObject(usb,"mic_prefill_attempts",stats.mic_prefill_attempts);
     cJSON_AddNumberToObject(usb,"mic_prefill_recovered",stats.mic_prefill_recovered);
@@ -256,6 +256,13 @@ static esp_err_t status_get(httpd_req_t *req) {
         cJSON_AddNumberToObject(iso,"out_missed",stats.out_missed);
         cJSON_AddNumberToObject(iso,"out_late_arms",stats.out_late_arms);
         cJSON_AddNumberToObject(iso,"out_missed_after_late",stats.out_missed_after_late);
+        cJSON_AddNumberToObject(iso,"isr_max_us",stats.isr_max_us);
+        cJSON_AddNumberToObject(iso,"isr_over150",stats.isr_over150);
+        cJSON_AddNumberToObject(iso,"isr_gap_max_us",stats.isr_gap_max_us);
+        cJSON_AddNumberToObject(iso,"isr_gaps_over1100",stats.isr_gaps_over1100);
+        cJSON_AddNumberToObject(iso,"rearm_max_us",stats.rearm_max_us);
+        cJSON *hist=cJSON_AddArrayToObject(iso,"rearm_hist");
+        for(unsigned i=0;hist && i<5;i++)cJSON_AddItemToArray(hist,cJSON_CreateNumber(stats.rearm_hist[i]));
     }
     cJSON *sizes=cJSON_AddObjectToObject(usb,"mic_packet_frames");
     if(sizes){cJSON_AddNumberToObject(sizes,"47",stats.mic_frames[0]);cJSON_AddNumberToObject(sizes,"48",stats.mic_frames[1]);
