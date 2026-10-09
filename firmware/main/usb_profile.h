@@ -8,3 +8,4 @@ bool vs_usb_adaptive_out(void);
 vs_usb_mode_t vs_usb_mode(void);
 const char *vs_usb_mode_name(void);
 esp_err_t usb_profile_save(vs_usb_mode_t mode);
+vs_usb_mode_t usb_profile_saved(void);   // the mode the next boot uses

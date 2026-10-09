@@ -3,3 +3,6 @@ dist/
 managed_components/
 sdkconfig
 sdkconfig.old
+
+# CI writes the commit here; ESP-IDF takes it as the firmware version
+version.txt

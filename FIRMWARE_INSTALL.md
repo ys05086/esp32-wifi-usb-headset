@@ -4,12 +4,18 @@
 
 대상 보드는 **ESP32-S3-N16R8 / 16 MB 플래시**, 현재 시험 보드는 **COM과 USB 포트가 따로 있는 모델**입니다. 일반 ESP32나 다른 플래시 구성에 그대로 설치하지 마세요. 이 펌웨어는 양방향 USB 헤드셋 실험 버전이며 간헐적인 끊김을 개선 중입니다.
 
+## 가장 쉬운 방법: 보드 설정 프로그램
+
+PC 앱 ZIP에 든 `ESP32BoardSetup.exe`가 펌웨어 설치와 Wi-Fi 설정을 한 창에서 합니다. 보드의 **COM** 포트를 PC에 연결하고 실행한 뒤 **펌웨어 설치**를 누르면 됩니다. 설치할 펌웨어는 ZIP의 `firmware/` 폴더에 들어 있습니다. 부트로더·파티션 표·앱을 따로 써서 설정(NVS)은 남고, 영역마다 MD5로 확인합니다. 설치가 끝나면 같은 창에서 공유기 Wi-Fi를 저장하고, 보드 자체 Wi-Fi 이름과 비밀번호를 확인합니다.
+
+아래는 esptool로 직접 굽는 방법입니다. Windows가 아니거나, 설정 프로그램이 보드를 다운로드 모드로 못 넣을 때 씁니다.
+
 ## 준비와 펌웨어 받기
 
 - **COM → PC**: 펌웨어 설치·로그용 USB 직렬 포트.
 - **USB / OTG → 소리를 들을 기기**: 설치 후 오디오용 포트.
 - 데이터 전송이 되는 USB 케이블을 사용합니다. 설치할 때는 보드의 USB/OTG 쪽을 기기에서 분리합니다.
-- [Firmware Actions](https://github.com/ys05086/esp32-wifi-usb-headset/actions/workflows/firmware.yml)의 성공한 실행에서 `esp32-wifi-usb-headset-firmware` artifact를 내려받아 압축을 풉니다. Actions artifact를 받으려면 GitHub 로그인이 필요합니다. PC 앱 ZIP에는 펌웨어가 들어 있지 않습니다.
+- [ESP32 Audio Bridge Windows Actions](https://github.com/ys05086/esp32-wifi-usb-headset/actions/workflows/windows.yml)의 성공한 실행에서 `esp32-wifi-usb-headset-firmware` artifact를 내려받아 압축을 풉니다(PC 앱 ZIP의 `firmware/` 폴더와 같은 파일입니다). Actions artifact를 받으려면 GitHub 로그인이 필요합니다.
 - 실행의 소스 커밋과 `source-commit.txt`를 확인합니다. 최신 빌드 성공만으로 음질 검증이 끝난 것은 아닙니다.
 
 | 파일 | 용도 | 기록 주소 |
@@ -73,10 +79,10 @@ ESP32-S3와 16 MB 플래시가 확인되어야 합니다. COM이 나타나지 �
 
 ## Wi-Fi와 USB 헤드셋 연결
 
-1. 전원을 켜고 `ESP32-Headset` Wi-Fi에 연결합니다. 비밀번호는 `esp32headset`입니다. 모든 보드에 같은 기본값이라, 설정은 근처에 모르는 사람이 없는 곳에서 합니다.
-2. 브라우저에서 `http://192.168.4.1`을 열고 **2.4 GHz 공유기** 이름과 비밀번호를 저장합니다. 보드 AP의 ‘인터넷 없음’ 표시는 설정 단계에서는 정상입니다.
-3. `router_ip`에 나타난 주소를 기록한 뒤 PC/휴대폰을 원래 네트워크로 돌립니다. PC는 동일 LAN의 유선 또는 5 GHz를 써도 됩니다. PC 앱에는 `192.168.4.1` 대신 기록한 공유기 주소를 입력합니다.
-4. 설정 페이지의 **USB compatibility**를 선택하고 저장합니다. Standard/Apple/Adaptive는 호환성 프로필이며 OS 자동 감지가 아닙니다. 저장 후 USB와 COM 전원을 모두 끊었다 다시 켜야 적용됩니다.
+1. 보드의 COM 포트를 PC에 연결한 채 `ESP32BoardSetup.exe`에서 **2.4 GHz 공유기** 이름과 비밀번호를 저장합니다. 보드가 공유기에 붙으면 보드 주소가 나타납니다. Windows가 아니면 시리얼 모니터(115200 bps)에서 `@set {"wifi_ssid":"공유기","wifi_password":"비밀번호"}`를 보내고 `@get`으로 `router_ip`를 확인합니다.
+2. 보드 자체 Wi-Fi는 `ESP32-Headset-XXXX`이고 비밀번호는 보드가 처음 켜질 때 무작위로 만듭니다. 설정 프로그램이나 `@get`의 `ap_password`로 확인합니다. 이 Wi-Fi에 연결한 기기에서는 `http://192.168.4.1` 설정 페이지에서도 공유기와 USB 모드를 바꿀 수 있습니다. 공유기 쪽에서는 상태만 보입니다.
+3. 기록한 보드 주소를 PC 앱에 넣습니다. PC는 동일 LAN의 유선 또는 5 GHz를 써도 됩니다.
+4. 설정 프로그램에서 **USB 모드**를 선택하고 저장합니다. Standard/Apple/Adaptive는 호환성 프로필이며 OS 자동 감지가 아닙니다. 저장 후 USB와 COM 전원을 모두 끊었다 다시 켜야 적용됩니다.
 5. **USB/OTG 포트**를 소리를 들을 기기에 연결합니다. 현재 iPhone 시험에서는 Adaptive로 양방향 통신을 확인했지만 간헐적인 마이크 끊김이 남아 있습니다. Standard는 시험한 iPhone에서 입력은 되지만 출력이 나오지 않았습니다. 기기별로 확인하세요.
 6. PC 앱에서 마이크와 헤드폰, 보드 IP를 선택하고 연결합니다. 꽂은 기기에서 녹음으로 마이크 방향을, 소리 재생으로 컴퓨터에서 들리는지를 각각 확인합니다. 앱에 ‘연결됨’이 표시되는 것만으로 기기의 각 앱이 USB 오디오를 쓰는지까지 확인되지는 않습니다.
 

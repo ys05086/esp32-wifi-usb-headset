@@ -2,13 +2,13 @@ name: ESP32 Audio Bridge Windows
 on:
   push:
     branches: [main]
-    paths-ignore:
-      - 'firmware/**'
-      - '.github/workflows/firmware.yml'
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
+  firmware:
+    # The ESP32-S3 firmware the setup program installs, built in the ESP-IDF container.
+    uses: ./.github/workflows/firmware.yml
   ffmpeg:
     # The minimal LGPL FFmpeg the AAC comparison runs, cross-compiled from the pinned source with mingw-w64.
     runs-on: ubuntu-latest
@@ -30,7 +30,7 @@ jobs:
           name: ffmpeg-lgpl
           path: ffmpeg/
   build:
-    needs: ffmpeg
+    needs: [ffmpeg, firmware]
     runs-on: windows-latest
     timeout-minutes: 15
     steps:
@@ -39,15 +39,34 @@ jobs:
         with:
           name: ffmpeg-lgpl
           path: ffmpeg
+      - uses: actions/download-artifact@v4
+        with:
+          name: esp32-wifi-usb-headset-firmware
+          path: firmware-dist
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
       - run: python -m pip install -r requirements.txt pyinstaller==6.22.3
       - run: python -m unittest discover
       - run: python -m PyInstaller --noconfirm --windowed --onedir --name ESP32AudioBridge app.py
-      - name: Bundle FFmpeg with its license texts and source
+      # The setup program shares the folder; its own runtime goes in setup_files next to _internal.
+      - run: python -m PyInstaller --noconfirm --windowed --onedir --name ESP32BoardSetup --contents-directory setup_files board_setup.py
+      - name: Bundle FFmpeg, the setup program and the firmware
         shell: pwsh
-        run: Copy-Item -Recurse ffmpeg dist/ESP32AudioBridge/ffmpeg
+        run: |
+          Copy-Item -Recurse ffmpeg dist/ESP32AudioBridge/ffmpeg
+          Copy-Item dist/ESP32BoardSetup/ESP32BoardSetup.exe dist/ESP32AudioBridge/
+          Copy-Item -Recurse dist/ESP32BoardSetup/setup_files dist/ESP32AudioBridge/setup_files
+          Copy-Item -Recurse firmware-dist dist/ESP32AudioBridge/firmware
+      - name: Verify the setup program loads its firmware
+        shell: pwsh
+        run: |
+          $report = Join-Path $env:RUNNER_TEMP 'setup-self-test.json'
+          $app = Start-Process -FilePath dist/ESP32AudioBridge/ESP32BoardSetup.exe -ArgumentList '--self-test', $report -Wait -PassThru -WindowStyle Hidden
+          if ($app.ExitCode -ne 0 -or !(Test-Path $report)) { throw 'Setup self-test failed' }
+          $result = Get-Content $report -Raw | ConvertFrom-Json
+          if (!$result.bundle) { throw "Setup program did not load the firmware: $($result.bundle_error)" }
+          Write-Output "Setup program bundles firmware $($result.bundle_version)"
       - name: Verify bundled AAC codec
         shell: pwsh
         run: |

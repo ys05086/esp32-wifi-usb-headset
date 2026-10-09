@@ -1,10 +1,8 @@
 name: Firmware
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - 'firmware/**'
-      - '.github/workflows/firmware.yml'
+  # The Windows workflow calls this on every push to main and ships the result with the setup program.
+  workflow_call:
 
 jobs:
   firmware:
@@ -22,6 +20,8 @@ jobs:
           /tmp/wifi-test
           gcc -Wall -Wextra -Werror -Ifirmware/main firmware/tests/mic_fifo_test.c -o /tmp/mic-fifo-test
           /tmp/mic-fifo-test
+          gcc -Wall -Wextra -Werror -Ifirmware/main firmware/main/board_identity.c firmware/main/uart_command.c firmware/tests/board_setup_test.c -o /tmp/board-setup-test
+          /tmp/board-setup-test
           python firmware/tests/iso_prime_test.py
           python firmware/tests/mic_trace_test.py
       - name: Build ESP32-S3 firmware
@@ -29,6 +29,8 @@ jobs:
         working-directory: firmware
         run: |
           . /opt/esp/idf/export.sh
+          # ESP-IDF takes version.txt as the firmware version; the setup program shows it and compares.
+          printf '%s\n' "${GITHUB_SHA::7}" > version.txt
           idf.py set-target esp32s3
           idf.py build
           python tests/feedback_startup_test.py managed_components/espressif__tinyusb
@@ -60,10 +62,33 @@ jobs:
           cp build/merged-binary.bin dist/esp32-wifi-usb-headset.bin
           cp build/esp32_wifi_usb_headset.bin dist/esp32-wifi-usb-headset-app.bin
           cp build/flasher_args.json dist/
+          cp build/bootloader/bootloader.bin dist/bootloader.bin
+          cp build/partition_table/partition-table.bin dist/partition-table.bin
+          python - <<'PY'
+          # manifest.json: what the setup program writes where. Separate images leave the settings (NVS) alone.
+          import hashlib, json, os
+          from pathlib import Path
+          args = json.loads(Path('build/flasher_args.json').read_text())
+          version = Path('version.txt').read_text().strip()
+          files = []
+          for name, file in [('bootloader', 'bootloader.bin'), ('partition-table', 'partition-table.bin'),
+                             ('app', 'esp32-wifi-usb-headset-app.bin')]:
+              data = Path('dist', file).read_bytes()
+              files.append({'name': name, 'offset': int(args[name]['offset'], 16), 'file': file,
+                            'size': len(data), 'sha256': hashlib.sha256(data).hexdigest()})
+          app = Path('dist/esp32-wifi-usb-headset-app.bin').read_bytes()
+          assert version.encode() in app, 'the app does not carry version.txt'
+          settings = args['flash_settings']
+          manifest = {'board': 'esp32-wifi-usb-headset', 'version': version, 'commit': os.environ['GITHUB_SHA'],
+                      'chip': args['extra_esptool_args']['chip'], 'flash_size': settings['flash_size'],
+                      'flash_mode': settings['flash_mode'], 'flash_freq': settings['flash_freq'], 'files': files}
+          Path('dist/manifest.json').write_text(json.dumps(manifest, indent=2))
+          print(json.dumps(manifest, indent=2))
+          PY
           cp dependencies.lock dist/
           printf '%s\n' "$GITHUB_SHA" > dist/source-commit.txt
           cd dist
-          sha256sum esp32-wifi-usb-headset.bin esp32-wifi-usb-headset-app.bin > SHA256SUMS.txt
+          sha256sum esp32-wifi-usb-headset.bin esp32-wifi-usb-headset-app.bin bootloader.bin partition-table.bin > SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
           name: esp32-wifi-usb-headset-firmware

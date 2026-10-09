@@ -25,14 +25,14 @@ PC 헤드폰 ← ESP32 Audio Bridge ← Wi-Fi ← ESP32 ← USB 스피커 ← �
 
 ## 사용법
 
-1. **펌웨어 설치:** [펌웨어 설치 안내](FIRMWARE_INSTALL.md)를 따라 Actions의 **Firmware** 실행에서 받은 파일을 보드의 COM 포트로 굽습니다. 처음 한 번만 하면 됩니다.
-2. **보드 Wi-Fi 설정:** 보드에 전원을 넣고 휴대폰이나 컴퓨터로 Wi-Fi **`ESP32-Headset`**(비밀번호 **`esp32headset`**)에 연결합니다. 브라우저에서 **http://192.168.4.1**을 열어 공유기 이름과 비밀번호를 저장하고, 페이지에 나타나는 **`router_ip`**를 적어 둡니다. 그다음 원래 Wi-Fi로 돌아갑니다. 설정은 보드에 저장되어 다음부터는 이 단계가 필요 없습니다.
-3. **PC 앱 받기:** Actions의 **ESP32 Audio Bridge Windows** 실행에서 `ESP32-Audio-Bridge-Windows` ZIP을 받아 압축을 풀고 `ESP32AudioBridge.exe`를 실행합니다. `_internal` 폴더도 함께 있어야 하며, Python 설치는 필요 없습니다.
+1. **PC 프로그램 받기:** Actions의 **ESP32 Audio Bridge Windows** 실행에서 `ESP32-Audio-Bridge-Windows` ZIP을 받아 압축을 풉니다. 듣기·말하기용 `ESP32AudioBridge.exe`, 보드 설정·펌웨어용 `ESP32BoardSetup.exe`, 펌웨어 파일이 함께 들어 있습니다. `_internal`과 `setup_files` 폴더도 옆에 있어야 하며, Python 설치는 필요 없습니다.
+2. **펌웨어 설치:** 보드의 **COM** 포트를 컴퓨터에 연결하고 `ESP32BoardSetup.exe`를 실행합니다(앱의 **보드 설정…** 버튼으로도 열립니다). 포트를 찾으면 **펌웨어 설치**를 누릅니다. 나중에 업데이트할 때도 같은 방법이며 보드 설정은 그대로 남습니다. esptool로 직접 굽는 방법은 [펌웨어 설치 안내](FIRMWARE_INSTALL.md)에 있습니다.
+3. **Wi-Fi 설정:** 같은 창의 **공유기 Wi-Fi**에 2.4 GHz 공유기 이름과 비밀번호를 넣고 **저장**합니다. 보드가 공유기에 붙으면 아래에 보드 주소가 나타나니 적어 둡니다. 창에는 보드 자체 Wi-Fi(**`ESP32-Headset-XXXX`**)와 보드마다 무작위로 만든 비밀번호도 보입니다. 공유기 없이 쓸 때는 그 Wi-Fi에 바로 연결하고 192.168.4.1을 씁니다.
 4. **기기에 꽂기:** 보드의 **USB** 포트를 소리를 들을 기기에 연결합니다. 기기에는 USB 오디오 장치 **`ESP32 Wi-Fi Headset`**이 생깁니다. 휴대폰은 보통 꽂으면 바로 바뀌고, Windows PC에서는 소리 설정에서 `스피커(usb uac)` / `마이크(usb uac)`를 고릅니다.
-5. **컴퓨터에서 연결:** PC 앱의 **ESP32 주소**에 적어 둔 `router_ip`를 넣습니다. **보낼 소리**에서 컴퓨터 마이크(또는 오디오 인터페이스·가상 케이블)를, **기기 소리**에서 컴퓨터 헤드폰을 고르고 **연결 시작**을 누릅니다.
+5. **컴퓨터에서 연결:** PC 앱의 **ESP32 주소**에 적어 둔 보드 주소를 넣습니다. **보낼 소리**에서 컴퓨터 마이크(또는 오디오 인터페이스·가상 케이블)를, **기기 소리**에서 컴퓨터 헤드폰을 고르고 **연결 시작**을 누릅니다.
 6. **듣기:** 이제 기기에서 나는 소리가 컴퓨터 헤드폰으로 들리고, 컴퓨터 마이크 소리가 기기의 마이크로 들어갑니다. 기기를 바꿀 때는 보드를 옮겨 꽂거나, 다른 보드의 주소로 바꿔 연결합니다.
 
-소리가 한쪽만 나거나 안 나면 보드 설정 페이지(공유기 주소 또는 192.168.4.1)의 **USB compatibility**를 바꿔 저장하고, 보드의 USB와 COM 케이블을 **모두** 뺐다 다시 꽂습니다. 시험한 결과는 아래와 같습니다. 기기마다 다를 수 있습니다.
+소리가 한쪽만 나거나 안 나면 보드 설정 프로그램의 **USB 모드**를 바꿔 저장하고, 보드의 USB와 COM 케이블을 **모두** 뺐다 다시 꽂습니다. 시험한 결과는 아래와 같습니다. 기기마다 다를 수 있습니다.
 
 | 꽂은 기기 | 잘 된 설정 |
 |---|---|
@@ -45,7 +45,8 @@ PC 헤드폰 ← ESP32 Audio Bridge ← Wi-Fi ← ESP32 ← USB 스피커 ← �
 - 컴퓨터에서는 **헤드폰**으로 들으세요. 스피커로 들으면 그 소리가 컴퓨터 마이크로 다시 들어가 기기로 되돌아갑니다. 기기 소리를 마이크나 가상 케이블로 다시 보내지도 마세요.
 - 지연은 보드 버퍼(약 60~100 ms)와 USB 버퍼(약 30 ms), PC 듣기 버퍼(40/80/120 ms), Wi-Fi 상태를 합한 만큼입니다.
 - 보드 하나에는 한 번에 한 프로그램만 연결됩니다. 다른 프로그램으로 바꾸려면 먼저 연결을 중지하세요.
-- 같은 공유기 안의 믿을 수 있는 기기끼리 쓰는 암호화되지 않은 UDP 전송입니다. 설정용 Wi-Fi 비밀번호는 모든 보드에 같은 기본값이니, 처음 설정은 근처에 모르는 사람이 없는 곳에서 하세요.
+- 보드 자체 Wi-Fi 비밀번호는 보드가 처음 켜질 때 보드마다 따로 만들고, COM 케이블로 연결한 설정 프로그램에서만 보입니다. 설정은 그 케이블이나 보드 자체 Wi-Fi에서만 바꿀 수 있고, 공유기 쪽에서는 보드 페이지가 상태만 보여 줍니다.
+- 소리는 암호화되지 않은 UDP로 오가며, 같은 공유기에 있는 기기는 보드로 소리를 보낼 수 있습니다. 믿을 수 있는 네트워크에서 쓰세요.
 - 끊김이 들리면 PC 앱의 **진단 저장**을 누르세요(아래 참고).
 
 이 저장소에서 직접 작성한 코드와 문서는 [MIT License](LICENSE)로 제공합니다(펌웨어는 [firmware/LICENSE](firmware/LICENSE)). 외부 소프트웨어와 원문 고지는 각자의 라이선스를 유지하며 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), `licenses/`, [LICENSING.md](LICENSING.md)를 참고하세요. 전체 바이너리 배포 조건 검토는 별도로 진행 중입니다.
@@ -87,9 +88,13 @@ python -m pip install -r requirements.txt
 sh tools/build_ffmpeg.sh ffmpeg        # 예: MSYS2 UCRT64에서. AAC 기능과 시험은 ffmpeg/ffmpeg.exe를 씁니다
 python -m unittest discover
 python app.py
+python board_setup.py
 python -m pip install pyinstaller==6.22.3
 python -m PyInstaller --noconfirm --windowed --onedir --name ESP32AudioBridge app.py
+python -m PyInstaller --noconfirm --windowed --onedir --name ESP32BoardSetup --contents-directory setup_files board_setup.py
 ```
+
+보드 설정 프로그램은 ESP32-S3에 내장된 ROM 다운로드 모드로 펌웨어를 씁니다(`esp_rom.py`). DTR/RTS로 보드를 다운로드 모드로 재시작하고, 부트로더·파티션 표·앱을 압축해서 쓰고(안 되면 압축 없이), 영역마다 MD5로 확인한 뒤 새 펌웨어로 재시작합니다. 사이의 설정(NVS) 영역은 초기화를 고르지 않으면 건드리지 않습니다. 별도 플래셔 스텁은 올리지 않습니다. 설정은 같은 COM 포트의 텍스트 명령(`@get`, `@set {json}`, `@new-password`, `@reboot`, `@help`)을 쓰므로 시리얼 모니터로도 할 수 있습니다.
 
 `app.py --self-test REPORT.json`은 숨겨진 창을 만들고 오디오 장치 열거 결과를 저장한 뒤 종료합니다. 녹음/재생은 시작하지 않습니다.
 `app.py --audio-self-test REPORT.json`은 저장된 입출력 장치를 실제 작업 스레드에서 짧게 열고, 로컬 UDP 테스트 서버로 송신을 검증합니다. 출력은 무음이며 음성 파일을 저장하거나 실제 보드로 전송하지 않습니다. Windows 작업 스레드는 WASAPI 시작 전에 COM을 초기화하고 스트림 종료 후 해제합니다.
@@ -97,10 +102,11 @@ python -m PyInstaller --noconfirm --windowed --onedir --name ESP32AudioBridge ap
 ## 검증 범위
 
 패킷 유효성, 세션 분리, 시퀀스 손실/재정렬, 버퍼 만료는 단위 검사합니다.
+펌웨어 설치기는 ROM 로더를 흉내 낸 가짜 보드로 검사합니다(다운로드 모드 진입, 압축·일반 쓰기, MD5 확인, 거부와 실패). 펌웨어의 비밀번호 생성과 COM 명령 해석은 C 테스트가 있습니다.
 가상 시간 30분 동안 주기적으로 최대 60 ms 늦는 패킷을 넣는 회귀 검사도 포함합니다. 실제 Wi-Fi/USB 장치나 장시간 사용을 검증한 결과는 아닙니다.
 ESP32 펌웨어와 실물 검사 스크립트는 [firmware/](firmware/)에 있습니다.
 
 이 저장소는 PC 앱과 ESP32 펌웨어를 함께 담습니다.
 GitHub Actions의 **ESP32 Audio Bridge Windows**에서 실행 ZIP을 받을 수 있습니다.
 
-Adaptive 실험 펌웨어의 활성 모드도 `Adaptive · 피드백 없음 (실험)`으로 표시합니다. 선택은 보드 웹페이지에서 하며 재부팅 후 적용됩니다. 이 클라이언트 업데이트는 오디오 송수신 처리를 변경하지 않습니다.
+Adaptive 실험 펌웨어의 활성 모드도 `Adaptive · 피드백 없음 (실험)`으로 표시합니다. 선택은 보드 설정 프로그램에서 하며 재부팅 후 적용됩니다. 이 클라이언트 업데이트는 오디오 송수신 처리를 변경하지 않습니다.

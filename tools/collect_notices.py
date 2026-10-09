@@ -21,7 +21,9 @@ def digest(path):
 def collect(bundle, output):
     output.mkdir(parents=True, exist_ok=True)
     records = []
-    packages = ['numpy', 'sounddevice', 'soxr', 'cffi', 'pycparser']
+    packages = ['numpy', 'sounddevice', 'soxr', 'cffi', 'pycparser', 'pyserial']
+    # Wheels that ship no license file: the text from the tagged source, kept in this repository.
+    reference = {'pyserial': Path(__file__).resolve().parents[1] / 'licenses' / 'python-packages' / 'pyserial'}
     # Optional modules observed in a PyInstaller build are also distributed code.
     for folder, package in [('PIL', 'Pillow'), ('yaml', 'PyYAML')]:
         if (bundle / '_internal' / folder).exists():
@@ -44,6 +46,12 @@ def collect(bundle, output):
             shutil.copyfile(source, target)
             copied.append({'file': target.relative_to(output).as_posix(),
                            'sha256': digest(target)})
+        if not copied and name in reference:
+            for source in sorted(reference[name].iterdir()):
+                target = output / 'python-packages' / name / source.name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(source, target)
+                copied.append({'file': target.relative_to(output).as_posix(), 'sha256': digest(target)})
         if not copied:
             raise RuntimeError(f'No installed license text found for {name}')
         records.append({'package': name, 'version': dist.version,
@@ -81,7 +89,8 @@ def collect(bundle, output):
                'source': [{'file': x.relative_to(bundle).as_posix(), 'sha256': digest(x)} for x in sources]}
 
     binaries = []
-    for path in sorted((bundle / '_internal').rglob('*')):
+    # _internal: ESP32AudioBridge.exe; setup_files: ESP32BoardSetup.exe
+    for path in sorted(p for folder in ('_internal', 'setup_files') for p in (bundle / folder).rglob('*')):
         if path.is_file() and path.suffix.lower() in ('.dll', '.pyd', '.dylib'):
             binaries.append({'file': path.relative_to(bundle).as_posix(),
                              'sha256': digest(path)})

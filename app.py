@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+import subprocess
 import sys
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
@@ -53,6 +54,7 @@ class App:
         row=ttk.Frame(frame);row.pack(fill='x')
         ttk.Label(row,text='듣기 크기').pack(side='left')
         ttk.Button(row,text='보내는 음질…',command=self.edit_quality).pack(side='right')
+        ttk.Button(row,text='보드 설정…',command=self.open_setup).pack(side='right',padx=(0,8))
         ttk.Scale(frame,from_=0,to=100,variable=self.volume,command=lambda _:self.controls()).pack(fill='x')
         row=ttk.Frame(frame);row.pack(fill='x',pady=12)
         self.button=ttk.Button(row,text='연결 시작',command=self.toggle);self.button.pack(side='left',expand=True,fill='x')
@@ -91,6 +93,13 @@ class App:
             CONFIG.write_text(json.dumps(saved,ensure_ascii=False,indent=2),encoding='utf-8')
             self.saved=saved;self.quality=value;self.quality_label.set(value.label)
         show_quality(self.root,self.quality,bool(self.client and self.client.active),apply)
+
+    def open_setup(self):
+        # Board Wi-Fi, router, USB mode and firmware installs: a program of its own, over the COM port.
+        if getattr(sys,'frozen',False):command=[str(Path(sys.executable).with_name('ESP32BoardSetup.exe'))]
+        else:command=[sys.executable,str(Path(__file__).with_name('board_setup.py'))]
+        try:subprocess.Popen(command)
+        except OSError as error:messagebox.showerror('보드 설정',str(error))
 
     def toggle(self):
         if self.client and self.client.active:self.client.stop();return

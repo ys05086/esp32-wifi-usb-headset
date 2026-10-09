@@ -20,12 +20,13 @@
 #include "usb_profile.h"
 #include "usb_diagnostics.h"
 #include "usb_mic_trace.h"
+#include "board_config.h"
 #include <stdlib.h>
 
 static const char *TAG = "wifi_pcm";
 static wifi_pcm_t pcm;
 static portMUX_TYPE pcm_lock = portMUX_INITIALIZER_UNLOCKED;
-static esp_netif_t *station;
+static esp_netif_t *station, *access_point;
 static bool configured;
 typedef struct {
     uint32_t session, generation;
@@ -42,6 +43,7 @@ static const char page[] =
 "input,button{box-sizing:border-box;width:100%;padding:14px;margin:8px 0;border:1px solid #ddd;border-radius:14px}button{background:#d9c9ee}pre{white-space:pre-wrap}</style>"
 "<h1>ESP32 Wi-Fi Headset</h1><p>Wi-Fi ↔ USB audio bridge</p>"
 "<p>Connect this board and your phone to the same 2.4 GHz Wi-Fi. Leave this page open to see the board IP.</p>"
+"<p>Settings save only while you are on this board's own Wi-Fi (its password is in the setup program); from the router side this page shows status only.</p>"
 "<form id=f><input id=s placeholder='Wi-Fi name (SSID)' maxlength=32 required><input id=p type=password placeholder='Wi-Fi password' maxlength=63>"
 "<button>Save Wi-Fi</button></form><pre id=r>Loading…</pre><p>Direct mode: 192.168.4.1 · UDP 49152</p>"
 "<h2>USB compatibility</h2><p>These are audio compatibility profiles, not OS detection. Android may work with either profile; keep the one that works on your phone.</p>"
@@ -252,7 +254,26 @@ static esp_err_t status_get(httpd_req_t *req) {
     httpd_resp_set_type(req,"application/json");
     esp_err_t result=httpd_resp_send(req,body,HTTPD_RESP_USE_STRLEN);cJSON_free(body);return result;
 }
+// Changing settings needs the board's own Wi-Fi, whose password only the owner has; the router side reads /status.
+static bool from_board_ap(httpd_req_t *req) {
+    struct sockaddr_storage local; socklen_t len=sizeof local; uint32_t address;
+    if(getsockname(httpd_req_to_sockfd(req),(struct sockaddr*)&local,&len)!=0) return false;
+    if(local.ss_family==AF_INET) address=((struct sockaddr_in*)&local)->sin_addr.s_addr;
+    else if(local.ss_family==AF_INET6) {  // a dual-stack server sees IPv4 as ::ffff:a.b.c.d
+        const uint8_t *v6=((struct sockaddr_in6*)&local)->sin6_addr.s6_addr;
+        static const uint8_t mapped[12]={0,0,0,0,0,0,0,0,0,0,0xff,0xff};
+        if(memcmp(v6,mapped,12)) return false;
+        memcpy(&address,v6+12,4);
+    } else return false;
+    esp_netif_ip_info_t info={0};
+    return esp_netif_get_ip_info(access_point,&info)==ESP_OK && info.ip.addr && address==info.ip.addr;
+}
+static esp_err_t not_from_ap(httpd_req_t *req) {
+    httpd_resp_set_status(req,"403 Forbidden");
+    return httpd_resp_sendstr(req,"Connect to the board's own Wi-Fi to change settings, or use the setup program over COM.");
+}
 static esp_err_t wifi_post(httpd_req_t *req) {
+    if(!from_board_ap(req)) return not_from_ap(req);
     if(req->content_len<=0 || req->content_len>240) return httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"Invalid size");
     char body[241];int got=0;
     while(got<req->content_len) {int n=httpd_req_recv(req,body+got,req->content_len-got);if(n<=0)return ESP_FAIL;got+=n;}body[got]=0;
@@ -260,16 +281,42 @@ static esp_err_t wifi_post(httpd_req_t *req) {
     if(!cJSON_IsString(ssid)||!cJSON_IsString(password)||strlen(ssid->valuestring)==0||strlen(ssid->valuestring)>32||strlen(password->valuestring)>63||(strlen(password->valuestring)>0&&strlen(password->valuestring)<8)) {
         cJSON_Delete(json);return httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"Check SSID and password (8-63 characters, or empty)");
     }
-    wifi_config_t cfg={0};memcpy(cfg.sta.ssid,ssid->valuestring,strlen(ssid->valuestring));memcpy(cfg.sta.password,password->valuestring,strlen(password->valuestring));
-    nvs_handle_t handle;esp_err_t error=nvs_open("vs_wifi",NVS_READWRITE,&handle);
-    if(error==ESP_OK) {error=nvs_set_str(handle,"ssid",ssid->valuestring);if(error==ESP_OK)error=nvs_set_str(handle,"password",password->valuestring);if(error==ESP_OK)error=nvs_commit(handle);nvs_close(handle);}
+    esp_err_t error=wifi_bridge_set_station(ssid->valuestring,password->valuestring);
     cJSON_Delete(json);
     if(error!=ESP_OK)return httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"Could not save Wi-Fi");
-    configured=false;esp_wifi_disconnect();error=esp_wifi_set_config(WIFI_IF_STA,&cfg);configured=error==ESP_OK;
-    if(configured)error=esp_wifi_connect();
-    return httpd_resp_sendstr(req,error==ESP_OK?"Saved. Router IP will appear below; then reconnect your phone to that Wi-Fi.":"Saved, but connection failed. Check settings.");
+    return httpd_resp_sendstr(req,"Saved. Router IP will appear below; then reconnect your phone to that Wi-Fi.");
 }
+esp_err_t wifi_bridge_set_station(const char *ssid, const char *password) {
+    nvs_handle_t handle;esp_err_t error=nvs_open("vs_wifi",NVS_READWRITE,&handle);
+    if(error!=ESP_OK)return error;
+    if(*ssid){error=nvs_set_str(handle,"ssid",ssid);if(error==ESP_OK)error=nvs_set_str(handle,"password",password);}
+    else error=nvs_erase_all(handle);
+    if(error==ESP_OK)error=nvs_commit(handle);
+    nvs_close(handle);
+    if(error!=ESP_OK)return error;
+    wifi_config_t cfg={0};memcpy(cfg.sta.ssid,ssid,strlen(ssid));memcpy(cfg.sta.password,password,strlen(password));
+    configured=false;esp_wifi_disconnect();error=esp_wifi_set_config(WIFI_IF_STA,&cfg);
+    if(error!=ESP_OK||!*ssid)return error;
+    configured=true;esp_wifi_connect();  // joins in the background; router_ip shows when it has
+    return ESP_OK;
+}
+bool wifi_bridge_station(char ssid[33], char ip[16]) {
+    wifi_config_t cfg={0};wifi_ap_record_t joined;esp_netif_ip_info_t info={0};
+    ssid[0]=ip[0]=0;
+    if(esp_wifi_get_config(WIFI_IF_STA,&cfg)==ESP_OK){memcpy(ssid,cfg.sta.ssid,32);ssid[32]=0;}
+    if(esp_wifi_sta_get_ap_info(&joined)!=ESP_OK||esp_netif_get_ip_info(station,&info)!=ESP_OK||!info.ip.addr)return false;
+    snprintf(ip,16,IPSTR,IP2STR(&info.ip));return true;
+}
+static void ap_config(wifi_config_t *ap) {
+    memset(ap,0,sizeof *ap);
+    const char *name=board_ap_ssid(),*pass=board_ap_password();
+    memcpy(ap->ap.ssid,name,strlen(name));ap->ap.ssid_len=(uint8_t)strlen(name);
+    memcpy(ap->ap.password,pass,strlen(pass));
+    ap->ap.channel=6;ap->ap.authmode=WIFI_AUTH_WPA2_PSK;ap->ap.max_connection=2;
+}
+esp_err_t wifi_bridge_apply_ap(void) { wifi_config_t ap;ap_config(&ap);return esp_wifi_set_config(WIFI_IF_AP,&ap); }
 static esp_err_t usb_mode_post(httpd_req_t *req) {
+    if(!from_board_ap(req)) return not_from_ap(req);
     if(req->content_len!=5 && req->content_len!=8) return httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"Expected apple, standard or adaptive");
     char mode[9]={0};int got=0;
     while(got<req->content_len){int n=httpd_req_recv(req,mode+got,req->content_len-got);if(n<=0)return ESP_FAIL;got+=n;}
@@ -287,13 +334,14 @@ void wifi_bridge_init(void) {
     ESP_ERROR_CHECK(return_queue?ESP_OK:ESP_ERR_NO_MEM);
     esp_err_t err=nvs_flash_init();
     if(err==ESP_ERR_NVS_NO_FREE_PAGES||err==ESP_ERR_NVS_NEW_VERSION_FOUND){ESP_ERROR_CHECK(nvs_flash_erase());err=nvs_flash_init();}ESP_ERROR_CHECK(err);
+    board_config_load();
     ESP_ERROR_CHECK(esp_netif_init());ESP_ERROR_CHECK(esp_event_loop_create_default());
-    esp_netif_create_default_wifi_ap();station=esp_netif_create_default_wifi_sta();
+    access_point=esp_netif_create_default_wifi_ap();station=esp_netif_create_default_wifi_sta();
     wifi_init_config_t init=WIFI_INIT_CONFIG_DEFAULT();ESP_ERROR_CHECK(esp_wifi_init(&init));
     ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
     ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT,ESP_EVENT_ANY_ID,event,NULL));
     ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT,IP_EVENT_STA_GOT_IP,event,NULL));
-    wifi_config_t ap={.ap={.ssid="ESP32-Headset",.password="esp32headset",.channel=6,.authmode=WIFI_AUTH_WPA2_PSK,.max_connection=2}};
+    wifi_config_t ap;ap_config(&ap);
     wifi_config_t sta={0};nvs_handle_t h;
     if(nvs_open("vs_wifi",NVS_READONLY,&h)==ESP_OK){char ssid[33]={0},pass[64]={0};size_t a=sizeof ssid,b=sizeof pass;configured=nvs_get_str(h,"ssid",ssid,&a)==ESP_OK&&nvs_get_str(h,"password",pass,&b)==ESP_OK;if(configured){memcpy(sta.sta.ssid,ssid,strlen(ssid));memcpy(sta.sta.password,pass,strlen(pass));}nvs_close(h);}
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP,&ap));
@@ -312,5 +360,5 @@ void wifi_bridge_init(void) {
     httpd_uri_t usb_mode={.uri="/usb-mode",.method=HTTP_POST,.handler=usb_mode_post};
     ESP_ERROR_CHECK(httpd_register_uri_handler(server,&usb_mode));
     ESP_ERROR_CHECK(xTaskCreate(udp_task,"wifi_pcm",8192,NULL,4,NULL)==pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
-    ESP_LOGI(TAG,"READY: Wi-Fi ESP32-Headset / esp32headset ; setup http://192.168.4.1 ; PCM UDP 49152");
+    ESP_LOGI(TAG,"READY: board Wi-Fi %s (password: setup program, or @get on COM) ; setup http://192.168.4.1 ; PCM UDP 49152",board_ap_ssid());
 }

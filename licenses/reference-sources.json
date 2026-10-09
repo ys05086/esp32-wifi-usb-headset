@@ -31,5 +31,11 @@
     "file": "firmware-reference/tinyusb-0.19.0~3-LICENSE",
     "source": "Pinned espressif/tinyusb 0.19.0~3 component",
     "sha256": "b171720e8a442e7a3957d83c62cd3299dbb29da3db534cc626f9dded0de2ca44"
+  },
+  {
+    "file": "python-packages/pyserial/LICENSE.txt",
+    "source": "https://github.com/pyserial/pyserial/blob/v3.5/LICENSE.txt",
+    "note": "The pyserial 3.5 wheel ships no license file; text from the v3.5 tag (commit 0e7634747568547b8a7f9fd0c48ed74f16af4b23)",
+    "sha256": "f91cb9813de6a5b142b8f7f2dede630b5134160aedaeaf55f4d6a7e2593ca3f3"
   }
 ]

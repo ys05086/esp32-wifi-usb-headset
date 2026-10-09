@@ -1,4 +1,5 @@
 #include <inttypes.h>
+#include <stdio.h>
 #include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -10,6 +11,8 @@
 #include "probe_tone.h"
 #include "wifi_bridge.h"
 #include "usb_profile.h"
+#include "board_config.h"
+#include "uart_command.h"
 
 static const char *TAG = "vs_mic";
 static portMUX_TYPE lock = portMUX_INITIALIZER_UNLOCKED;
@@ -54,14 +57,14 @@ static esp_err_t speaker(uint8_t *buf, size_t len, void *ctx)
 
 void app_main(void)
 {
-    // Use the separate COM bridge for commands; the native USB port is UAC only.
+    // Use the separate COM bridge for commands (probe tone, board setup); the native USB port is UAC only.
     const uart_config_t uart = {
         .baud_rate = 115200, .data_bits = UART_DATA_8_BITS, .parity = UART_PARITY_DISABLE,
         .stop_bits = UART_STOP_BITS_1, .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
         .source_clk = UART_SCLK_DEFAULT
     };
     ESP_ERROR_CHECK(uart_param_config(UART_NUM_0, &uart));
-    ESP_ERROR_CHECK(uart_driver_install(UART_NUM_0, 256, 0, 0, NULL, 0));
+    ESP_ERROR_CHECK(uart_driver_install(UART_NUM_0, 1024, 0, 0, NULL, 0));
     // GPIO0 is the BOOT button on the S3 development board. No RGB LED pins are driven.
     const gpio_config_t button = {
         .pin_bit_mask = 1ULL << GPIO_NUM_0, .mode = GPIO_MODE_INPUT,
@@ -76,6 +79,9 @@ void app_main(void)
     wifi_bridge_init();
     ESP_LOGI(TAG, "READY: ESP32 Wi-Fi Headset; 48000 Hz / PCM16; mono mic, stereo speaker");
     ESP_LOGI(TAG, "BOOT/UART 't': finite probe override. Otherwise: Wi-Fi PCM to USB, silence on disconnect.");
+    ESP_LOGI(TAG, "Setup on this port: @get, @set {json}, @new-password, @reboot, @help");
+    static uart_command_t input;  // main task only
+    uart_command_init(&input);
     int previous = 1, stable = 1;
     int64_t changed_at = 0, last_report = 0;
     while (1) {
@@ -86,10 +92,19 @@ void app_main(void)
             stable = level;
             if (stable == 0) trigger(true);
         }
-        uint8_t command;
-        if (uart_read_bytes(UART_NUM_0, &command, 1, 0) == 1) {
-            if (command == 't') trigger(true);
-            else if (command == 's') trigger(false);
+        uint8_t bytes[64];
+        int got;
+        while ((got = uart_read_bytes(UART_NUM_0, bytes, sizeof bytes, 0)) > 0) {
+            for (int i = 0; i < got; i++) {
+                switch (uart_command_feed(&input, bytes[i])) {
+                case UART_PROBE: trigger(true); break;
+                case UART_SILENCE: trigger(false); break;
+                case UART_LINE: board_config_command(input.line); break;
+                case UART_TOO_LONG: printf("@err line too long
+"); fflush(stdout); break;
+                default: break;
+                }
+            }
         }
         if (now - last_report >= 10000000) {
             uint32_t blocks, max_us;
