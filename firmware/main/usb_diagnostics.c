@@ -66,6 +66,10 @@ void vs_usb_diag_xfer(unsigned kind, unsigned result, unsigned bytes) {
         ep->bytes += bytes;
         if (bytes == 0) { ep->zero++; if (kind == 0) event(VS_USB_EVENT_EMPTY, 0, 0); }
         else if (kind == 0 && bytes < VS_MIC_MIN_PACKET_BYTES) { ep->partial++; event(VS_USB_EVENT_SHORT, 0, bytes); }
+        if (kind == 0 && bytes) {
+            unsigned frames = bytes / 2;   // mono PCM16
+            stats.mic_frames[frames >= 47 && frames <= 49 ? frames - 47 : 3]++;
+        }
     }
     portEXIT_CRITICAL(&lock);
     if (kind==0 && result==0 && bytes==0) vs_mic_trace_empty_completion();

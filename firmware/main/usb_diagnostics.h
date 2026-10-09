@@ -22,6 +22,8 @@ typedef struct {
     uint32_t spk_chunks, spk_zero_chunks, spk_zero_after_sound, spk_queue_full, spk_restarts;
     // the most chunks waiting when the speaker task took one, and how often more than 8 were (the old depth)
     uint32_t spk_backlog_max, spk_backlog_over8;
+    // microphone packets by size, 47 / 48 / 49 frames / other: the host may read the board's clock from these
+    uint32_t mic_frames[4];
     uint32_t event_count;          // every event so far; the ring keeps the last VS_USB_EVENTS
     vs_usb_event_t events[VS_USB_EVENTS];
     bool mic_active, speaker_active;
