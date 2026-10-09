@@ -169,6 +169,25 @@ SPEAKER_DIAG_PATCHES = [
      '        tud_audio_n_clear_ep_out_ff(func_id);'),
 ]
 
+# The phone's speaker volume and mute go to the board, which applies them to the sound sent to the PC (an
+# iPhone sends the stream at full scale and leaves the volume to the device). Channels past the speaker's
+# are refused: the stored arrays have one slot per channel. Applied last and restored first.
+VOLUME_PATCHES = [
+    ('''    TU_ASSERT(request->bEntityID == UAC2_ENTITY_SPK_FEATURE_UNIT);
+    TU_VERIFY(request->bRequest == AUDIO_CS_REQ_CUR);''',
+     '''    TU_ASSERT(request->bEntityID == UAC2_ENTITY_SPK_FEATURE_UNIT);
+    TU_VERIFY(request->bRequest == AUDIO_CS_REQ_CUR);
+    TU_VERIFY(request->bChannelNumber <= CFG_TUD_AUDIO_FUNC_1_N_CHANNELS_RX);'''),
+    ('''        s_uac_device->mute[request->bChannelNumber] = ((audio_control_cur_1_t const *)buf)->bCur;''',
+     '''        s_uac_device->mute[request->bChannelNumber] = ((audio_control_cur_1_t const *)buf)->bCur;
+        extern void vs_speaker_mute(unsigned channel, bool mute);
+        vs_speaker_mute(request->bChannelNumber, s_uac_device->mute[request->bChannelNumber] != 0);'''),
+    ('''        s_uac_device->volume[request->bChannelNumber] = ((audio_control_cur_2_t const *)buf)->bCur;''',
+     '''        s_uac_device->volume[request->bChannelNumber] = ((audio_control_cur_2_t const *)buf)->bCur;
+        extern void vs_speaker_volume(unsigned channel, int16_t volume);
+        vs_speaker_volume(request->bChannelNumber, s_uac_device->volume[request->bChannelNumber]);'''),
+]
+
 # Added after pacing patches; restore these FIRST so pinned source hashes remain valid.
 TRACE_PATCHES = [
     ('#include "usb_mic_refill.h"', '#include "usb_mic_refill.h"\n#include "usb_mic_trace.h"'),
@@ -190,6 +209,8 @@ def patch(root):
         if relative == 'tusb/usb_descriptors.c':
             original = original.replace(DESCRIPTOR_PREVIOUS, DESCRIPTOR_OLD).replace(DESCRIPTOR_INCLUDE_NEW, DESCRIPTOR_INCLUDE_OLD)
         if relative == 'usb_device_uac.c':
+            for volume_old, volume_new in reversed(VOLUME_PATCHES):
+                original = original.replace(volume_new, volume_old)
             for diag_old, diag_new in reversed(SPEAKER_DIAG_PATCHES):
                 original = original.replace(diag_new, diag_old)
             for trace_old, trace_new in reversed(TRACE_PATCHES):
@@ -205,7 +226,7 @@ def patch(root):
             raise RuntimeError(f'Ambiguous patch anchor: {path}')
         content = restored.replace(old, new)
         if relative == 'usb_device_uac.c':
-            for extra_old, extra_new in SPEAKER_PATCHES + MIC_PACING_PATCHES + TRACE_PATCHES + SPEAKER_DIAG_PATCHES:
+            for extra_old, extra_new in SPEAKER_PATCHES + MIC_PACING_PATCHES + TRACE_PATCHES + SPEAKER_DIAG_PATCHES + VOLUME_PATCHES:
                 if content.count(extra_old) != 1:
                     raise RuntimeError('Unexpected speaker handoff source')
                 content = content.replace(extra_old, extra_new)

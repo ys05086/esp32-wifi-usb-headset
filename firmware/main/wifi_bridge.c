@@ -21,6 +21,7 @@
 #include "usb_diagnostics.h"
 #include "usb_mic_trace.h"
 #include "board_config.h"
+#include "speaker_volume.h"
 #include <stdlib.h>
 #include "esp_system.h"
 
@@ -41,6 +42,9 @@ static uint32_t generation, return_sent, return_dropped;
 // Device sound lost on the board without a count before: frames of half-built blocks thrown away (a 50 ms
 // stall or a new session), and finished blocks not sent: too old (over 80 ms) or no longer for this phone.
 static uint32_t return_partial_frames, return_stale, return_invalid;
+// The phone's speaker volume (speaker_volume.h): set from the TinyUSB task, applied to the sound sent to the PC.
+static speaker_volume_t phone_volume;
+static int32_t phone_gain[2] = {SPEAKER_GAIN_UNITY, SPEAKER_GAIN_UNITY};
 static const char page[] =
 "<!doctype html><html><meta name='viewport' content='width=device-width,initial-scale=1'><meta charset='utf-8'>"
 "<title>ESP32 Wi-Fi Headset</title><style>body{background:#f5f1fa;color:#343044;font:16px system-ui;max-width:440px;margin:40px auto;padding:22px}"
@@ -70,15 +74,43 @@ void wifi_bridge_read(uint8_t *out, size_t bytes) {
     }
     if (bytes & 1) out[bytes-1] = 0;
 }
+
+static void phone_volume_changed(bool known) {
+    if (!known) return;
+    portENTER_CRITICAL(&pcm_lock);
+    speaker_volume_t now = phone_volume;
+    portEXIT_CRITICAL(&pcm_lock);
+    int32_t left = speaker_volume_gain(&now, 0), right = speaker_volume_gain(&now, 1);
+    portENTER_CRITICAL(&pcm_lock);
+    phone_gain[0] = left; phone_gain[1] = right;
+    portEXIT_CRITICAL(&pcm_lock);
+}
+
+void vs_speaker_volume(unsigned channel, int16_t volume) {
+    portENTER_CRITICAL(&pcm_lock);
+    bool known = speaker_volume_set(&phone_volume, channel, volume);
+    portEXIT_CRITICAL(&pcm_lock);
+    phone_volume_changed(known);
+}
+
+void vs_speaker_mute(unsigned channel, bool mute) {
+    portENTER_CRITICAL(&pcm_lock);
+    bool known = speaker_volume_mute(&phone_volume, channel, mute);
+    portEXIT_CRITICAL(&pcm_lock);
+    phone_volume_changed(known);
+}
+
 void wifi_bridge_speaker(const uint8_t *stereo, size_t bytes) {
     // Only the UAC speaker task owns this assembler. Never call sockets from it.
     static return_audio_t block;
     static size_t frames;
+    static int32_t gain[2];   // ramps to the phone's volume; from 0 at first, so the sound fades in
     if (!return_queue) return;
     int64_t now = esp_timer_get_time()/1000;
     portENTER_CRITICAL(&pcm_lock);
     bool enabled = duplex && owner_valid && pcm.active && now-pcm.last_ms <= 300;
     uint32_t session = pcm.session, epoch = generation;
+    int32_t target[2] = {phone_gain[0], phone_gain[1]};
     portEXIT_CRITICAL(&pcm_lock);
     if (!enabled) { frames = 0; return; }
     if (block.generation != epoch || (frames && now-block.created_ms > 50)) {
@@ -90,7 +122,9 @@ void wifi_bridge_speaker(const uint8_t *stereo, size_t bytes) {
         if (!frames) block.created_ms = now;
         int32_t left=(int16_t)(stereo[i] | (unsigned)stereo[i+1]<<8);
         int32_t right=(int16_t)(stereo[i+2] | (unsigned)stereo[i+3]<<8);
-        uint16_t sample=(uint16_t)(int16_t)((left+right)/2);
+        gain[0]=speaker_gain_ramp(gain[0],target[0]);
+        gain[1]=speaker_gain_ramp(gain[1],target[1]);
+        uint16_t sample=(uint16_t)(int16_t)(((int64_t)left*gain[0]+(int64_t)right*gain[1])>>17);
         block.data[frames*2]=(uint8_t)sample; block.data[frames*2+1]=(uint8_t)(sample>>8);
         if (++frames==480) {
             if (xQueueSend(return_queue,&block,0)!=pdTRUE) {
@@ -227,6 +261,21 @@ static esp_err_t status_get(httpd_req_t *req) {
     cJSON_AddNumberToObject(root,"return_partial_frames",partial);
     cJSON_AddNumberToObject(root,"return_stale",stale);
     cJSON_AddNumberToObject(root,"return_invalid",invalid);
+    // the phone's speaker volume in dB (master, left, right), mute, and the gain applied to the sound sent
+    portENTER_CRITICAL(&pcm_lock);
+    speaker_volume_t volume=phone_volume;
+    int32_t applied[2]={phone_gain[0],phone_gain[1]};
+    portEXIT_CRITICAL(&pcm_lock);
+    cJSON *phone=cJSON_AddObjectToObject(root,"phone_volume");
+    if(phone){
+        cJSON *db=cJSON_AddArrayToObject(phone,"db"),*mute=cJSON_AddArrayToObject(phone,"mute"),*gain=cJSON_AddArrayToObject(phone,"gain");
+        for(unsigned i=0;i<SPEAKER_VOLUME_CHANNELS;i++){
+            if(db)cJSON_AddItemToArray(db,cJSON_CreateNumber(volume.volume[i]/256.0));
+            if(mute)cJSON_AddItemToArray(mute,cJSON_CreateBool(volume.mute[i]));
+        }
+        for(unsigned i=0;gain && i<2;i++)cJSON_AddItemToArray(gain,cJSON_CreateNumber(applied[i]/65536.0));
+        cJSON_AddNumberToObject(phone,"changes",volume.changes);
+    }
     cJSON *usb=cJSON_AddObjectToObject(root,"usb");
     if(!usb){cJSON_Delete(root);return httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"Diagnostic allocation failed");}
     vs_usb_stats_t stats=vs_usb_diag_snapshot();

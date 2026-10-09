@@ -22,6 +22,8 @@ jobs:
           /tmp/mic-fifo-test
           gcc -Wall -Wextra -Werror -Ifirmware/main firmware/main/board_identity.c firmware/main/uart_command.c firmware/tests/board_setup_test.c -o /tmp/board-setup-test
           /tmp/board-setup-test
+          gcc -Wall -Wextra -Werror -Ifirmware/main firmware/main/speaker_volume.c firmware/tests/speaker_volume_test.c -lm -o /tmp/speaker-volume-test
+          /tmp/speaker-volume-test
           python firmware/tests/iso_prime_test.py
           python firmware/tests/mic_trace_test.py
       - name: Build ESP32-S3 firmware
