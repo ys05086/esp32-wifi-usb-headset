@@ -47,6 +47,7 @@ If sound works in only one direction or not at all, change **USB 모드** (USB m
 | Windows PC | Standard |
 | iPhone | Adaptive (with Standard, only the microphone direction worked) |
 | Galaxy | Apple |
+| iPhone | Apple (worked fine, but may have issues) |
 
 **Good to know**
 
