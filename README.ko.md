@@ -45,6 +45,7 @@ PC 헤드폰 ← ESP32 Audio Bridge ← Wi-Fi ← ESP32 ← USB 스피커 ← �
 | Windows PC | Standard |
 | iPhone | Adaptive (Standard는 마이크만 되고 소리가 안 나옴) |
 | Galaxy | Apple |
+| iPhone | Apple (작동을 하는 것을 확인했으나, 안정성 문제가 발생할 가능성이 있음) |
 
 **알아 둘 점**
 
