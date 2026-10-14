@@ -11,6 +11,7 @@ from protocol import slider_db, slider_position
 from board_status import BoardStatus
 from audio_quality import QualitySettings, quality_self_test
 from quality_dialog import show_quality
+from microphone_level import microphone_percent
 
 CONFIG = Path(sys.executable if getattr(sys, 'frozen', False) else __file__).parent / 'settings.json'
 
@@ -24,9 +25,9 @@ class App:
         style.configure('.',font=('맑은 고딕',10),background='#f5f1fa',foreground='#393247')
         style.configure('TButton',padding=10,background='#decdf2')
         style.configure('TEntry',padding=8); style.configure('TCombobox',padding=7)
-        frame=ttk.Frame(root,padding=24); frame.pack(fill='both',expand=True)
+        frame=ttk.Frame(root,padding=20); frame.pack(fill='both',expand=True)
         ttk.Label(frame,text='ESP32 Audio Bridge',font=('맑은 고딕',23,'bold')).pack(anchor='w')
-        ttk.Label(frame,text='USB로 꽂은 기기의 소리를 Wi-Fi로 PC에서 듣고, PC 마이크를 그 기기에',padding=(0,6,0,18)).pack(anchor='w')
+        ttk.Label(frame,text='USB로 꽂은 기기의 소리를 Wi-Fi로 PC에서 듣고, PC 마이크를 그 기기에',padding=(0,6,0,8)).pack(anchor='w')
         self.host=tk.StringVar(value='192.168.0.14')
         try: saved=json.loads(CONFIG.read_text(encoding='utf-8-sig')); self.host.set(saved.get('host',self.host.get()))
         except (OSError,ValueError): saved={}
@@ -34,14 +35,23 @@ class App:
         self.quality=QualitySettings.restore(saved.get('quality'))
         self.quality_label=tk.StringVar(value=self.quality.label)
         ttk.Label(frame,text='ESP32 주소').pack(anchor='w')
-        self.host_entry=ttk.Entry(frame,textvariable=self.host); self.host_entry.pack(fill='x',pady=(4,10))
+        self.host_entry=ttk.Entry(frame,textvariable=self.host); self.host_entry.pack(fill='x',pady=(4,6))
         self.board=BoardStatus()
         self.usb_mode=tk.StringVar(value='USB 모드 · 확인 중…')
-        ttk.Label(frame,textvariable=self.usb_mode,padding=(0,0,0,10)).pack(anchor='w')
+        ttk.Label(frame,textvariable=self.usb_mode,padding=(0,0,0,6)).pack(anchor='w')
         ttk.Label(frame,text='보낼 소리 · PC 마이크 / 오디오 입력').pack(anchor='w')
-        self.input=ttk.Combobox(frame,state='readonly');self.input.pack(fill='x',pady=(4,10))
+        self.input=ttk.Combobox(frame,state='readonly');self.input.pack(fill='x',pady=(4,6))
+        self.mic_volume=tk.DoubleVar(value=microphone_percent(saved.get('microphone_volume_percent',100)))
+        self.mic_volume_label=tk.StringVar()
+        self.mic_save_after=None
+        row=ttk.Frame(frame);row.pack(fill='x',pady=(0,4))
+        ttk.Label(row,textvariable=self.mic_volume_label,width=21).pack(side='left')
+        ttk.Button(row,text='100%로',command=self.reset_microphone_volume).pack(side='right',padx=(8,0))
+        self.mic_scale=ttk.Scale(row,from_=0,to=200,variable=self.mic_volume,command=self.microphone_volume_moved)
+        self.mic_scale.pack(side='left',fill='x',expand=True)
+        self.show_microphone_volume()
         ttk.Label(frame,text='기기 소리 · PC 이어폰 / 헤드폰').pack(anchor='w')
-        self.output=ttk.Combobox(frame,state='readonly');self.output.pack(fill='x',pady=(4,10))
+        self.output=ttk.Combobox(frame,state='readonly');self.output.pack(fill='x',pady=(4,6))
         row=ttk.Frame(frame);row.pack(fill='x',pady=(0,8))
         ttk.Label(row,text='듣기 버퍼 · 클수록 안정적, 지연 증가').pack(side='left')
         saved_buffer = saved.get('buffer_ms',80)
@@ -59,7 +69,7 @@ class App:
         ttk.Button(row,text='보내는 음질…',command=self.edit_quality).pack(side='right')
         ttk.Button(row,text='보드 설정…',command=self.open_setup).pack(side='right',padx=(0,8))
         ttk.Scale(frame,from_=0,to=100,variable=self.volume,command=lambda _:self.volume_moved()).pack(fill='x')
-        row=ttk.Frame(frame);row.pack(fill='x',pady=12)
+        row=ttk.Frame(frame);row.pack(fill='x',pady=6)
         self.button=ttk.Button(row,text='연결 시작',command=self.toggle);self.button.pack(side='left',expand=True,fill='x')
         self.refresh_button=ttk.Button(row,text='장치 새로고침',command=self.refresh);self.refresh_button.pack(side='left',padx=(10,0))
         ttk.Button(row,text='진단 저장',command=self.save_diagnostics).pack(side='left',padx=(8,0))
@@ -89,6 +99,27 @@ class App:
     def controls(self):
         if self.client:
             self.client.mic_muted=self.mute.get();self.client.return_muted=self.deafen.get();self.client.output_gain=self.volume.get()/100
+            self.client.input_gain=microphone_percent(self.mic_volume.get())/100
+
+    def show_microphone_volume(self):
+        percent=microphone_percent(self.mic_volume.get())
+        label='무음' if percent==0 else ('원래 크기' if percent==100 else ('증폭' if percent>100 else '줄이기'))
+        self.mic_volume_label.set(f'마이크 {percent}% · {label}')
+
+    def microphone_volume_moved(self, _=None):
+        self.show_microphone_volume();self.controls()
+        if self.mic_save_after is not None:self.root.after_cancel(self.mic_save_after)
+        self.mic_save_after=self.root.after(400,self.save_microphone_volume)
+
+    def reset_microphone_volume(self):
+        self.mic_volume.set(100);self.microphone_volume_moved()
+
+    def save_microphone_volume(self):
+        if self.mic_save_after is not None:self.root.after_cancel(self.mic_save_after)
+        self.mic_save_after=None
+        self.saved['microphone_volume_percent']=microphone_percent(self.mic_volume.get())
+        try:CONFIG.write_text(json.dumps(self.saved,ensure_ascii=False,indent=2),encoding='utf-8')
+        except OSError as error:messagebox.showerror('마이크 음량 저장',str(error))
 
     def volume_moved(self):
         # Linked with the board: the slider sets the board's listening level (the phone's volume until then).
@@ -125,7 +156,8 @@ class App:
         try:
             client=HeadsetClient(self.host.get().strip(),self.inputs[self.input.get()],self.outputs[self.output.get()],int(self.buffer_ms.get()),self.quality)
             self.client=client;self.controls();client.start()
-            self.saved={'host':self.host.get().strip(),'input':self.input.get().rsplit(' · ',1)[0],'output':self.output.get().rsplit(' · ',1)[0],'buffer_ms':int(self.buffer_ms.get()),'quality':self.quality.to_dict()}
+            self.saved={**self.saved,'host':self.host.get().strip(),'input':self.input.get().rsplit(' · ',1)[0],'output':self.output.get().rsplit(' · ',1)[0],'buffer_ms':int(self.buffer_ms.get()),'quality':self.quality.to_dict(),
+                        'microphone_volume_percent':microphone_percent(self.mic_volume.get())}
             try:CONFIG.write_text(json.dumps(self.saved,ensure_ascii=False,indent=2),encoding='utf-8')
             except OSError:pass
         except Exception as error:messagebox.showerror('연결',str(error))
@@ -138,6 +170,7 @@ class App:
         c=self.client;b=c.returns
         report={'input':self.input.get(),'output':self.output.get(),'status':c.status,
                 'input_rate':c.input_rate,'output_rate':c.output_rate,'target_buffer_ms':b.target_blocks*10,
+                'microphone_volume_percent':round(c.input_gain*100),'microphone_gain_overrange_samples':c.input_clipped_samples,
                 'return_received':b.received,'return_lost_at_playback':b.lost,'return_underruns':b.underruns,
                 'return_late':b.late,'return_reordered':b.reordered,'return_discarded':b.discarded,
                 'queued_ms':b.queued_ms,'max_return_arrival_gap_ms':round(b.max_gap_ms,2),
@@ -175,6 +208,7 @@ class App:
 
     def close(self):
         if self.client:self.client.stop()
+        if self.mic_save_after is not None:self.save_microphone_volume()
         self.root.destroy()
 
 

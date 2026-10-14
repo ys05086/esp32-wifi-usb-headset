@@ -80,6 +80,10 @@ The app checks each audio device's supported formats. Devices without 48 kHz (so
 
 ## Sending quality · AAC comparison
 
+The **마이크** (microphone level) slider below the input device controls outgoing audio from 0–200%, default 100% (unchanged). Zero is silent and 200% doubles amplitude (about +6 dB). **100%로** restores unity. It works while connected, applies to newly captured audio, and saves automatically in `settings.json`; older settings default to 100%.
+
+Gain is applied after mono downmix, before resampling and AAC encoding. Changes ramp over 10 ms without an additional audio buffer; audio already queued or sent retains its previous level. Listening volume and the phone's volume are independent. Excessive boost saturates at the PCM limits and can distort: reduce the microphone level if this happens. Diagnostics record the microphone percentage and samples exceeding the PCM range after gain. No firmware update is needed.
+
 Under **보내는 음질…** (sending quality), with the connection stopped, choose a setting, save and reconnect. The setting is saved in `settings.json`. The default is plain **원음 PCM** (original PCM); **AAC 압축·복원** (AAC encode and decode) affects only the audio you send.
 
 - Sample rates: 16 / 24 / 32 / 44.1 / 48 kHz.

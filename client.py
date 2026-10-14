@@ -13,6 +13,7 @@ import sounddevice as sd
 from protocol import LevelReader, ListeningLevel, ReturnBuffer, level_command, microphone
 from audio_format import endpoint_format, PCMConverter
 from audio_quality import QualitySettings, AACProcessor
+from microphone_level import GainRamp
 
 
 class HeadsetClient:
@@ -33,6 +34,8 @@ class HeadsetClient:
         self.stop_event = threading.Event()
         self.thread = None
         self.input_gain = self.output_gain = 1.0
+        self.microphone_ramp = GainRamp()
+        self.input_clipped_samples = 0
         self.mic_muted = self.return_muted = False
         self.status = '연결 준비 중'
         self.sent = self.input_drops = self.audio_errors = 0
@@ -55,7 +58,9 @@ class HeadsetClient:
 
     def capture(self, data, frames, timing, status):
         if status: self.audio_errors += 1; self.capture_errors += 1
-        mono = data.astype(np.int32).mean(axis=1) * self.input_gain
+        mono = data.astype(np.int32).mean(axis=1)
+        mono = self.microphone_ramp.apply(mono, self.input_gain, self.input_rate)
+        self.input_clipped_samples += int(np.count_nonzero((mono < -32768) | (mono > 32767)))
         self.capture_converter.push(mono)
         while True:
             block = self.capture_converter.pop(480)
@@ -118,6 +123,7 @@ class HeadsetClient:
             self.input_rate, input_channels = endpoint_format(self.input_device, 'input')
             self.output_rate, output_channels = endpoint_format(self.output_device, 'output')
             self.capture_converter = PCMConverter(self.input_rate, 48000)
+            self.microphone_ramp = GainRamp(self.input_gain)
             self.playback_converter = PCMConverter(48000, self.output_rate)
             if self.quality.mode == 'aac':
                 self.processor = AACProcessor(self.quality)
