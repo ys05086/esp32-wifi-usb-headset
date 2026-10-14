@@ -1,91 +1,97 @@
-# ESP32 펌웨어 설치 · Windows
+# ESP32 firmware installation · Windows
 
-> **⚠️ 실험 중인 프로젝트입니다.** Wi-Fi·USB 패킷 문제로 중간중간 소리가 끊기거나, 지직거리거나, 음질이 깨지는 현상이 발생할 수 있습니다. 기기와 네트워크 환경에 따라 정도가 다릅니다. 중요한 통화·방송·녹음에는 아직 쓰지 마세요.
+**English** | [한국어](FIRMWARE_INSTALL.ko.md)
 
-대상 보드는 **ESP32-S3-N16R8 / 16 MB 플래시**, 현재 시험 보드는 **COM과 USB 포트가 따로 있는 모델**입니다. 일반 ESP32나 다른 플래시 구성에 그대로 설치하지 마세요. 이 펌웨어는 양방향 USB 헤드셋 실험 버전이며 간헐적인 끊김을 개선 중입니다.
+> **Experimental project:** intermittent Wi-Fi or USB problems can cause dropouts, crackling or degraded audio. Results depend on the device and network. Do not rely on this version for important calls, streams or recordings.
 
-## 가장 쉬운 방법: 보드 설정 프로그램
+This firmware targets the **ESP32-S3-N16R8 with 16 MB flash**. The tested board has separate **COM** and **USB** ports. Do not install these images on a regular ESP32 or a board with a different flash configuration. This is the two-way USB headset firmware; intermittent audio issues are still being investigated.
 
-PC 앱 ZIP에 든 `ESP32BoardSetup.exe`가 펌웨어 설치와 Wi-Fi 설정을 한 창에서 합니다. 보드의 **COM** 포트를 PC에 연결하고 실행한 뒤 **펌웨어 설치**를 누르면 됩니다. 설치할 펌웨어는 ZIP의 `firmware/` 폴더에 들어 있습니다. 부트로더·파티션 표·앱을 따로 써서 설정(NVS)은 남고, 영역마다 MD5로 확인합니다. 설치가 끝나면 같은 창에서 공유기 Wi-Fi를 저장하고, 보드 자체 Wi-Fi 이름과 비밀번호를 확인합니다.
+## Easiest method: Board Setup
 
-아래는 esptool로 직접 굽는 방법입니다. Windows가 아니거나, 설정 프로그램이 보드를 다운로드 모드로 못 넣을 때 씁니다.
+The PC app ZIP includes `ESP32BoardSetup.exe`, which installs firmware and configures Wi-Fi in one window. Connect the board's **COM** port to the PC, open **Board setup…** from Audio Bridge and press **Install firmware**. Choose **English** in Audio Bridge before opening Board Setup if needed.
 
-## 준비와 펌웨어 받기
+![Board Setup in English, with example settings](docs/images/board-setup-en.png)
 
-- **COM → PC**: 펌웨어 설치·로그용 USB 직렬 포트.
-- **USB / OTG → 소리를 들을 기기**: 설치 후 오디오용 포트.
-- 데이터 전송이 되는 USB 케이블을 사용합니다. 설치할 때는 보드의 USB/OTG 쪽을 기기에서 분리합니다.
-- [ESP32 Audio Bridge Windows Actions](https://github.com/ys05086/esp32-wifi-usb-headset/actions/workflows/windows.yml)의 성공한 실행에서 `esp32-wifi-usb-headset-firmware` artifact를 내려받아 압축을 풉니다(PC 앱 ZIP의 `firmware/` 폴더와 같은 파일입니다). Actions artifact를 받으려면 GitHub 로그인이 필요합니다.
-- 실행의 소스 커밋과 `source-commit.txt`를 확인합니다. 최신 빌드 성공만으로 음질 검증이 끝난 것은 아닙니다.
+The installer uses the ZIP's `firmware/` folder. It writes the bootloader, partition table and application separately, preserves the settings (NVS) region unless **Reset settings too** is selected, and verifies each written region with MD5. After installation, save your router Wi-Fi settings in the same window and check the board's own Wi-Fi name and password.
 
-| 파일 | 용도 | 기록 주소 |
-| --- | --- | --- |
-| `esp32-wifi-usb-headset.bin` | 최초 설치용 병합 이미지 | `0x0` |
-| `esp32-wifi-usb-headset-app.bin` | 같은 파티션 구성을 쓰는 기존 보드의 앱 업데이트 | `0x10000` |
-| `flasher_args.json` | 해당 빌드의 플래시 설정과 파티션 주소 확인 | 기록하지 않음 |
-| `SHA256SUMS.txt`, `source-commit.txt`, `dependencies.lock` | 파일 검증·버전 확인 | 기록하지 않음 |
+The remaining sections describe manual flashing with esptool, useful if you cannot use the Windows setup program or it cannot enter download mode automatically.
 
-펌웨어 폴더에서 PowerShell을 열고 다음 해시를 `SHA256SUMS.txt`와 비교합니다.
+## Prepare the board and download firmware
+
+- **COM → PC:** USB-serial connection for installation and logs.
+- **USB / OTG → audio device:** USB audio connection after installation.
+- Use USB data cables. Disconnect the USB/OTG audio cable from the other device while flashing manually.
+- Download and extract the `esp32-wifi-usb-headset-firmware` artifact from a successful [ESP32 Audio Bridge Windows workflow run](https://github.com/ys05086/esp32-wifi-usb-headset/actions/workflows/windows.yml). These are the same files as the PC app ZIP's `firmware/` folder. GitHub requires signing in to download Actions artifacts.
+- Check the run's source commit against `source-commit.txt`. A successful build alone does not establish audio quality.
+
+| File | Purpose | Flash address |
+|---|---|---|
+| `esp32-wifi-usb-headset.bin` | Merged image for first installation | `0x0` |
+| `esp32-wifi-usb-headset-app.bin` | Application update for an existing board with the same partition layout | `0x10000` |
+| `flasher_args.json` | Flash settings and partition addresses for this build | Do not flash |
+| `SHA256SUMS.txt`, `source-commit.txt`, `dependencies.lock` | Integrity and version information | Do not flash |
+
+Open PowerShell in the firmware folder and compare these hashes with `SHA256SUMS.txt`:
 
 ```powershell
 Get-FileHash .\esp32-wifi-usb-headset.bin -Algorithm SHA256
 Get-FileHash .\esp32-wifi-usb-headset-app.bin -Algorithm SHA256
 ```
 
-## 설치 도구와 포트 확인
+## Install esptool and identify the port
 
-PC 앱 실행에는 Python이 필요 없지만, 아래 수동 설치 방법은 Python이 필요합니다. Python 3.10 이상을 준비하고 다음을 실행합니다. 설치 도구는 이 폴더의 가상환경에만 설치됩니다.
+The packaged PC apps do not need Python. Manual flashing below requires Python 3.10 or later. These commands install esptool into a virtual environment in the current folder:
 
 ```powershell
 py -3 -m venv .flash-tools
 .\.flash-tools\Scripts\python.exe -m pip install esptool==5.1.0
 ```
 
-`py`가 없고 `python`이 정상 작동한다면 첫 줄의 `py -3`을 `python`으로 바꿉니다. 장치 관리자 → **포트(COM 및 LPT)**에서 보드를 꽂을 때 나타나는 COM 번호를 확인합니다. 아래 `COM7`은 예시이며 자신의 번호로 바꿉니다. 직렬 모니터는 닫습니다.
+If `py` is unavailable but `python` works, replace `py -3` with `python` in the first command. In Device Manager → **Ports (COM & LPT)**, find the COM port that appears when you connect the board. Replace the example `COM7` below with your port. Close any serial monitor using it.
 
 ```powershell
 .\.flash-tools\Scripts\python.exe -m esptool --chip esp32s3 --port COM7 flash-id
 ```
 
-ESP32-S3와 16 MB 플래시가 확인되어야 합니다. COM이 나타나지 않으면 케이블과 보드의 COM 포트를 확인하고, 보드에 실제 탑재된 USB 직렬 칩의 제조사 드라이버를 설치합니다. 시험 보드는 CH343입니다.
+Confirm the chip is ESP32-S3 and flash capacity is 16 MB. If no COM port appears, check the data cable and the board's COM connector, then install the driver supplied by the manufacturer of the board's actual USB-serial chip. The tested board uses CH343.
 
-## 기존 내용 백업
+## Back up the existing flash
 
 ```powershell
 .\.flash-tools\Scripts\python.exe -m esptool --chip esp32s3 --port COM7 --baud 460800 read-flash 0x0 0x1000000 board-backup.bin
 ```
 
-백업이 완료되고 파일 크기가 16,777,216바이트인지 확인합니다. 백업에는 Wi-Fi 설정 등이 들어갈 수 있으므로 개인 보관하고 배포 ZIP이나 GitHub에는 올리지 않습니다. 기존 백업이 있으면 다른 파일명을 사용합니다.
+Confirm the backup completes and is 16,777,216 bytes. It may contain Wi-Fi credentials; keep it private and exclude it from distribution ZIPs and GitHub. Use another filename if a backup already exists.
 
-## 최초 설치
+## First installation
 
-새 보드이거나 다른 펌웨어에서 넘어오는 경우입니다. 병합 이미지 기록은 기존 파티션과 설정 영역을 덮어쓸 수 있습니다.
+Use this for a new board or when replacing different firmware. Writing the merged image can overwrite existing partitions and settings.
 
 ```powershell
 .\.flash-tools\Scripts\python.exe -m esptool --chip esp32s3 --port COM7 --baud 460800 write-flash --flash-mode dio --flash-freq 40m --flash-size 16MB 0x0 .\esp32-wifi-usb-headset.bin
 ```
 
-## 기존 보드 업데이트
+## Update an existing board
 
-이 프로젝트의 같은 파티션 구성을 사용하는 보드에만 적용합니다. 배포물의 `flasher_args.json`에서 앱 주소가 `0x10000`인지 확인합니다. 앱 영역만 기록하므로 NVS의 Wi-Fi·USB 모드 설정을 보존합니다. 파티션 구성 변경이 있는 배포물에는 이 방법을 그대로 사용하지 않습니다.
+Use this only for a board already running this project with the same partition layout. Confirm the app address is `0x10000` in the release's `flasher_args.json`. Writing only the app preserves Wi-Fi and USB mode settings in NVS. Do not use this procedure unchanged if the new firmware changes the partition layout.
 
 ```powershell
 .\.flash-tools\Scripts\python.exe -m esptool --chip esp32s3 --port COM7 --baud 460800 write-flash 0x10000 .\esp32-wifi-usb-headset-app.bin
 ```
 
-기록과 해시 검증이 성공한 뒤 보드의 **USB와 COM 케이블을 모두 뺐다가** 다시 연결합니다. 앱 업데이트 파일을 `0x0`에 쓰거나 병합 이미지를 `0x10000`에 쓰지 않습니다. 일반 업데이트에 전체 플래시 삭제는 필요 없습니다.
+After writing and hash verification succeed, unplug **both USB and COM cables**, then reconnect. Do not write the application-only image at `0x0` or the merged image at `0x10000`. A normal update does not require erasing the whole flash.
 
-연결 단계에서 실패하면 **BOOT를 누른 채 RESET을 짧게 누르고 BOOT를 놓아** 다운로드 모드에 진입한 뒤 재시도합니다. 다운로드 모드에서는 오디오 장치로 동작하지 않습니다. 기록 중 케이블을 빼지 마세요. 전송 오류가 반복되면 `--baud 115200`으로 낮춰 재시도합니다.
+If connection fails, hold **BOOT**, briefly press and release **RESET**, then release BOOT to enter download mode and retry. The board is not an audio device while in download mode. Keep the cable connected during writing. If transfer errors recur, retry with `--baud 115200`.
 
-## Wi-Fi와 USB 헤드셋 연결
+## Connect Wi-Fi and USB audio
 
-1. 보드의 COM 포트를 PC에 연결한 채 `ESP32BoardSetup.exe`에서 **2.4 GHz 공유기** 이름과 비밀번호를 저장합니다. 보드가 공유기에 붙으면 보드 주소가 나타납니다. Windows가 아니면 시리얼 모니터(115200 bps)에서 `@set {"wifi_ssid":"공유기","wifi_password":"비밀번호"}`를 보내고 `@get`으로 `router_ip`를 확인합니다.
-2. 보드 자체 Wi-Fi는 `ESP32-Headset-XXXX`이고 비밀번호는 보드가 처음 켜질 때 무작위로 만듭니다. 설정 프로그램이나 `@get`의 `ap_password`로 확인합니다. 이 Wi-Fi에 연결한 기기에서는 `http://192.168.4.1` 설정 페이지에서도 공유기와 USB 모드를 바꿀 수 있습니다. 공유기 쪽에서는 상태만 보입니다.
-3. 기록한 보드 주소를 PC 앱에 넣습니다. PC는 동일 LAN의 유선 또는 5 GHz를 써도 됩니다.
-4. 설정 프로그램에서 **USB 모드**를 선택하고 저장합니다. Standard/Apple/Adaptive는 호환성 프로필이며 OS 자동 감지가 아닙니다. 저장 후 USB와 COM 전원을 모두 끊었다 다시 켜야 적용됩니다.
-5. **USB/OTG 포트**를 소리를 들을 기기에 연결합니다. 현재 iPhone 시험에서는 Adaptive로 양방향 통신을 확인했지만 간헐적인 마이크 끊김이 남아 있습니다. Standard는 시험한 iPhone에서 입력은 되지만 출력이 나오지 않았습니다. 기기별로 확인하세요.
-6. PC 앱에서 마이크와 헤드폰, 보드 IP를 선택하고 연결합니다. 꽂은 기기에서 녹음으로 마이크 방향을, 소리 재생으로 컴퓨터에서 들리는지를 각각 확인합니다. 앱에 ‘연결됨’이 표시되는 것만으로 기기의 각 앱이 USB 오디오를 쓰는지까지 확인되지는 않습니다.
+1. Keep COM connected to the PC and save your **2.4 GHz router's** name and password in Board Setup. Its address appears after connecting. Without the Windows program, use a serial monitor at 115200 bps: send `@set {"wifi_ssid":"YourRouter","wifi_password":"YourPassword"}`, then `@get` to read `router_ip`.
+2. The board's own Wi-Fi is named `ESP32-Headset-XXXX` and gets a random password on first boot. Read it in Board Setup or the `ap_password` field from `@get`. Devices on that Wi-Fi can also change router and USB mode settings at `http://192.168.4.1`. The router-side page is status-only.
+3. Enter the board address in Audio Bridge. The PC may use Ethernet or 5 GHz Wi-Fi on the same LAN.
+4. Select and save **USB mode** in Board Setup. Standard, Apple and Adaptive are compatibility profiles, not automatic OS detection. Disconnect both USB and COM power, then reconnect to apply the saved mode.
+5. Connect **USB/OTG** to the device whose audio you want to use. Adaptive has worked in both directions on the tested iPhone, with intermittent microphone dropouts still observed. Standard provided microphone input but no playback on that iPhone. Test your own device.
+6. In Audio Bridge, select the input, headphones and board address, then press **Connect**. Record on the USB device to test the microphone direction, and play sound on it to test the return direction. A connected status alone does not prove every app on the device is using USB audio.
 
-Lightning iPhone은 USB 호스트 연결을 지원하는 어댑터와 필요시 외부 전원이 필요합니다. 단순 Lightning–USB-C 충전 케이블로 연결되는 것으로 가정하지 마세요. 꽂을 기기에 맞는 USB 데이터/호스트 연결을 사용합니다.
+Lightning iPhones need an adapter supporting USB host operation, and may need external power. Do not assume a simple Lightning–USB-C charging cable provides this connection. Use a data/host connection suitable for the device.
 
-공식 명령 안내: [Espressif esptool](https://docs.espressif.com/projects/esptool/en/latest/esp32s3/esptool/basic-commands.html). 직접 빌드할 때는 [펌웨어 소스와 빌드 안내](firmware/README.md)를 참고하세요.
+See the official [Espressif esptool command reference](https://docs.espressif.com/projects/esptool/en/latest/esp32s3/esptool/basic-commands.html). For building from source, see the [firmware development guide](firmware/README.md), currently in Korean.

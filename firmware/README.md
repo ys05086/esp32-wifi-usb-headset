@@ -91,7 +91,7 @@ idf.py merge-bin
 
 `.github/workflows/firmware.yml`은 `firmware/` 변경 또는 수동 실행에서 호스트 시험과 펌웨어 빌드를 돌린다.
 결과물 `esp32-wifi-usb-headset.bin`은 최초 설치용 주소 `0x0` 병합 이미지, `esp32-wifi-usb-headset-app.bin`은 기존 보드 업데이트용으로 `0x10000`에 기록해 NVS의 공유기 설정을 보존한다. `flasher_args.json`의 오프셋을 확인한다.
-artifact의 `source-commit.txt`와 `SHA256SUMS.txt`를 함께 보관한다. 설치 절차는 [FIRMWARE_INSTALL.md](../FIRMWARE_INSTALL.md)에 있다.
+artifact의 `source-commit.txt`와 `SHA256SUMS.txt`를 함께 보관한다. 설치 절차는 [한국어 안내](../FIRMWARE_INSTALL.ko.md)와 [English guide](../FIRMWARE_INSTALL.md)에 있다.
 
 업로드 전에 보드의 칩/16MB 플래시를 확인하고, 기존 플래시 전체를 로컬에 백업한다.
 백업은 기존 네트워크 설정 등을 포함할 수 있으므로 저장소와 배포 ZIP에 포함하지 않는다.

@@ -81,6 +81,8 @@ jobs:
           Copy-Item README.ko.md dist/ESP32AudioBridge/README.ko.md
           Copy-Item LICENSE dist/ESP32AudioBridge/LICENSE
           Copy-Item FIRMWARE_INSTALL.md dist/ESP32AudioBridge/FIRMWARE_INSTALL.md
+          Copy-Item FIRMWARE_INSTALL.ko.md dist/ESP32AudioBridge/FIRMWARE_INSTALL.ko.md
+          Copy-Item -Recurse docs dist/ESP32AudioBridge/docs
           Copy-Item LICENSING.md dist/ESP32AudioBridge/LICENSING.md
           Copy-Item THIRD_PARTY_NOTICES.md dist/ESP32AudioBridge/THIRD_PARTY_NOTICES.md
           python tools/collect_notices.py --bundle dist/ESP32AudioBridge --output dist/ESP32AudioBridge/licenses
