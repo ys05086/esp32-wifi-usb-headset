@@ -2,13 +2,20 @@
 import math
 import numpy as np
 
+MAX_MICROPHONE_PERCENT = 1000
+
 
 def microphone_percent(value):
     try:
         value = float(value)
     except (TypeError, ValueError):
         return 100
-    return round(min(200, max(0, value))) if math.isfinite(value) else 100
+    return round(min(MAX_MICROPHONE_PERCENT, max(0, value))) if math.isfinite(value) else 100
+
+
+def microphone_db(percent):
+    percent = microphone_percent(percent)
+    return 20 * math.log10(percent / 100) if percent else None
 
 
 class GainRamp:
@@ -18,7 +25,7 @@ class GainRamp:
         self.remaining = 0
 
     def apply(self, samples, gain, sample_rate):
-        gain = min(2.0, max(0.0, gain)) if math.isfinite(gain) else 1.0
+        gain = min(MAX_MICROPHONE_PERCENT / 100, max(0.0, gain)) if math.isfinite(gain) else 1.0
         if gain != self.target:
             self.target = gain
             self.remaining = max(1, round(sample_rate * .01))

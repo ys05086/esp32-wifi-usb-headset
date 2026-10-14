@@ -9,7 +9,7 @@ from unittest.mock import patch
 import numpy as np
 from audio_quality import QualitySettings
 from client import HeadsetClient
-from microphone_level import GainRamp, microphone_percent
+from microphone_level import GainRamp, microphone_percent, microphone_db
 
 
 class MicrophoneTests(unittest.TestCase):
@@ -17,8 +17,14 @@ class MicrophoneTests(unittest.TestCase):
         for invalid in [None, {}, 'bad', float('nan'), float('inf')]:
             self.assertEqual(microphone_percent(invalid), 100)
         self.assertEqual(microphone_percent(-20), 0)
-        self.assertEqual(microphone_percent(500), 200)
+        self.assertEqual(microphone_percent(500), 500)
+        self.assertEqual(microphone_percent(1500), 1000)
         self.assertEqual(microphone_percent(150), 150)
+
+    def test_percentage_maps_to_amplitude_decibels(self):
+        self.assertIsNone(microphone_db(0))
+        for percent,db in [(10,-20),(100,0),(300,9.5424),(500,13.9794),(1000,20)]:
+            self.assertAlmostEqual(microphone_db(percent),db,places=3)
 
     def test_ramp_is_ten_ms_across_callback_sizes_and_rates(self):
         for rate in [16000, 44100, 48000, 96000]:
@@ -35,9 +41,9 @@ class MicrophoneTests(unittest.TestCase):
             self.assertLess(abs(rising[0]-falling[-1]),.02)
 
     def test_capture_scales_pcm_and_aac_input_without_changing_listening(self):
-        source=np.full((480,2),12000,dtype=np.int16)
+        source=np.full((480,2),3000,dtype=np.int16)
         for mode in ['pcm','aac']:
-            for gain,expected in [(0,0),(.5,6000),(1,12000),(2,24000)]:
+            for gain,expected in [(0,0),(.5,1500),(1,3000),(2,6000),(3,9000),(5,15000),(10,30000)]:
                 with self.subTest(mode=mode,gain=gain):
                     c=HeadsetClient('127.0.0.1',None,None,quality=QualitySettings(mode))
                     c.input_gain=gain;c.microphone_ramp=GainRamp(gain)
@@ -49,10 +55,10 @@ class MicrophoneTests(unittest.TestCase):
 
     def test_boost_saturates_without_integer_wrap_and_counts_overrange(self):
         c=HeadsetClient('127.0.0.1',None,None)
-        c.input_gain=2;c.microphone_ramp=GainRamp(2)
+        c.input_gain=10;c.microphone_ramp=GainRamp(10)
         source=np.tile(np.array([30000,-30000,1000,-1000],dtype=np.int16),120)
         c.capture(source[:,None],480,None,None)
-        expected=np.clip(source.astype(np.int32)*2,-32768,32767).astype('<i2')
+        expected=np.clip(source.astype(np.int32)*10,-32768,32767).astype('<i2')
         self.assertEqual(c.captured.get_nowait(),expected.tobytes())
         self.assertEqual(c.input_clipped_samples,240)
 
@@ -70,15 +76,21 @@ class MicrophoneTests(unittest.TestCase):
                     ui.mic_volume.set(150);ui.microphone_volume_moved()
                     self.assertEqual(ui.client.input_gain,1.5)
                     self.assertEqual(ui.client.output_gain,.8)
+                    ui.mic_scale.set(1000)
+                    self.assertEqual(ui.client.input_gain,10)
+                    self.assertIn('+20.0 dB',ui.mic_volume_label.get())
+                    ui.mic_scale.set(300)
+                    self.assertEqual(ui.client.input_gain,3)
+                    self.assertIn('+9.5 dB',ui.mic_volume_label.get())
                     ui.save_microphone_volume()
                     saved=json.loads(config.read_text())
-                    self.assertEqual(saved['microphone_volume_percent'],150)
+                    self.assertEqual(saved['microphone_volume_percent'],300)
                     self.assertEqual(saved['other_setting'],'preserved')
                 finally:
                     ui.client=None;ui.close()
                 root=tk.Tk();root.withdraw();ui=app.App(root)
                 try:
-                    self.assertEqual(ui.mic_volume.get(),150)
+                    self.assertEqual(ui.mic_volume.get(),300)
                     ui.reset_microphone_volume()
                     # Closing before the debounce interval must still save the new value.
                 finally:ui.close()

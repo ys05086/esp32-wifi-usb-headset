@@ -80,7 +80,7 @@ The app checks each audio device's supported formats. Devices without 48 kHz (so
 
 ## Microphone volume
 
-The **Mic** slider below the input device controls outgoing audio from 0–200%, default 100% (unchanged). Zero is silent and 200% doubles amplitude (about +6 dB). **Reset 100%** restores unity. It works while connected, applies to newly captured audio, and saves automatically in `settings.json`; older settings default to 100%.
+The **Mic** slider below the input device controls outgoing audio from 0–1000%, default 100% (unchanged). The label also shows gain in dB: 300% is about +9.5 dB, 500% +14 dB, and 1000% +20 dB. Zero is silent. **Reset 100%** restores unity. It works while connected, applies to newly captured audio, and saves automatically in `settings.json`; older settings default to 100%.
 
 Gain is applied after mono downmix, before resampling and AAC encoding. Changes ramp over 10 ms without an additional audio buffer; audio already queued or sent retains its previous level. Listening volume and the phone's volume are independent. Excessive boost saturates at the PCM limits and can distort: reduce the microphone level if this happens. Diagnostics record the microphone percentage and samples exceeding the PCM range after gain. No firmware update is needed.
 
@@ -120,7 +120,7 @@ To prepare documentation screenshots, run `python tools/preview_docs.py --view a
 
 ## What is tested
 
-The latest UI update passed 51 automated tests, including language switching without replacing the connection, saved preferences, translation coverage and microphone gain. Unit tests cover packet validation, session separation, sequence loss and reordering, and buffer expiry, plus a regression test that delays packets by up to 60 ms periodically over 30 virtual minutes. The installer is tested against a simulated ROM loader (download-mode reset, compressed and plain writes, MD5 checks, refusals and failures), and the firmware's password maker and COM command parser have C tests. These do not stand in for real Wi-Fi and USB hardware or long sessions.
+The latest UI update passed 52 automated tests, including language switching without replacing the connection, saved preferences, translation coverage and microphone gain. Unit tests cover packet validation, session separation, sequence loss and reordering, and buffer expiry, plus a regression test that delays packets by up to 60 ms periodically over 30 virtual minutes. The installer is tested against a simulated ROM loader (download-mode reset, compressed and plain writes, MD5 checks, refusals and failures), and the firmware's password maker and COM command parser have C tests. These do not stand in for real Wi-Fi and USB hardware or long sessions.
 The ESP32 firmware and its hardware test scripts are in [firmware/](firmware/).
 
 This repository holds both the Windows app and the ESP32 firmware. The app ZIP comes from the **ESP32 Audio Bridge Windows** Actions workflow.

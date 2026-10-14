@@ -12,7 +12,7 @@ from protocol import slider_db, slider_position
 from board_status import BoardStatus
 from audio_quality import QualitySettings, quality_self_test
 from quality_dialog import show_quality
-from microphone_level import microphone_percent
+from microphone_level import MAX_MICROPHONE_PERCENT, microphone_percent, microphone_db
 
 CONFIG = Path(sys.executable if getattr(sys, 'frozen', False) else __file__).parent / 'settings.json'
 
@@ -53,9 +53,9 @@ class App:
         self.mic_volume_label=tk.StringVar()
         self.mic_save_after=None
         row=ttk.Frame(frame);row.pack(fill='x',pady=(0,4))
-        ttk.Label(row,textvariable=self.mic_volume_label,width=21).pack(side='left')
+        ttk.Label(row,textvariable=self.mic_volume_label,width=26).pack(side='left')
         ttk.Button(row,text=tr('100%로'),command=self.reset_microphone_volume).pack(side='right',padx=(8,0))
-        self.mic_scale=ttk.Scale(row,from_=0,to=200,variable=self.mic_volume,command=self.microphone_volume_moved)
+        self.mic_scale=ttk.Scale(row,from_=0,to=MAX_MICROPHONE_PERCENT,variable=self.mic_volume,command=self.microphone_volume_moved)
         self.mic_scale.pack(side='left',fill='x',expand=True)
         self.show_microphone_volume()
         ttk.Label(frame,text=tr('기기 소리 · PC 이어폰 / 헤드폰')).pack(anchor='w')
@@ -122,7 +122,8 @@ class App:
 
     def show_microphone_volume(self):
         percent=microphone_percent(self.mic_volume.get())
-        label=tr('무음') if percent==0 else (tr('원래 크기') if percent==100 else (tr('증폭') if percent>100 else tr('줄이기')))
+        db=microphone_db(percent)
+        label=tr('무음') if db is None else f'{db:+.1f} dB'
         self.mic_volume_label.set(tr('마이크 {v0}% · {v1}', v0=percent, v1=label))
 
     def microphone_volume_moved(self, _=None):
