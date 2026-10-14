@@ -23,7 +23,7 @@ The address, audio devices, board name, password and router in these screens are
 
 > **⚠️ This is an experimental project.** Wi-Fi and USB packet problems can still make the sound drop out, crackle or degrade now and then. How often depends on the device and the network. Do not rely on it yet for important calls, streams or recordings.
 
-The Windows programs and the install guide are currently in Korean; the labels below are given in Korean with a translation.
+The Windows programs support **English and 한국어**. Choose a language at the top right of Audio Bridge; it changes immediately without interrupting audio and is saved for the next launch. The first launch follows the Windows locale (Korean for a Korean locale, English otherwise). Audio quality dialogs, connection details and board setup opened from the app use the selected language. Reopen an already open board setup window to apply a new language. Device names stay as reported by Windows. The manual install guide is in Korean; the steps below include both UI labels.
 
 ## What you need
 

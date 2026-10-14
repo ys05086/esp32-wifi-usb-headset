@@ -4,6 +4,7 @@ The firmware answers "@get", "@set {json}", "@new-password" and "@reboot" with o
 "@err message" line; everything else on the port is its log. Opening the port must not reset the board,
 so DTR and RTS stay released (on these boards they drive EN and IO0).
 """
+from i18n import tr
 import json
 import time
 
@@ -19,11 +20,11 @@ class BoardError(Exception):
 def ap_password_problem(text):
     """None if the board takes `text` as its own Wi-Fi password (WPA2: 8-63 printable ASCII), else why not."""
     if text != text.strip():
-        return '앞뒤 공백은 빼 주세요. 휴대폰에서 칠 때 헷갈려요.'
+        return tr('앞뒤 공백은 빼 주세요. 휴대폰에서 칠 때 헷갈려요.')
     if not 8 <= len(text) <= 63:
-        return '8~63자로 정하세요.'
+        return tr('8~63자로 정하세요.')
     if any(not ' ' <= c <= '~' for c in text):
-        return '영문, 숫자, 기호만 쓸 수 있어요 (한글·이모지는 Wi-Fi 비밀번호에 못 써요).'
+        return tr('영문, 숫자, 기호만 쓸 수 있어요 (한글·이모지는 Wi-Fi 비밀번호에 못 써요).')
     return None
 
 
@@ -70,12 +71,12 @@ class BoardLink:
                     self.log = (self.log + [line])[-20:]
         # Firmware without setup commands took the 't' in the line as its probe-tone key: stop that tone.
         self.port.write(b's')
-        raise BoardError('보드가 답하지 않아요')
+        raise BoardError(tr('보드가 답하지 않아요'))
 
     def get(self):
         state = self.command('get')
         if state.get('board') != 'esp32-wifi-usb-headset':
-            raise BoardError('이 펌웨어의 보드가 아니에요')
+            raise BoardError(tr('이 펌웨어의 보드가 아니에요'))
         return state
 
     def set(self, **fields):

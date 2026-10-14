@@ -5,6 +5,7 @@ manifest.json (written by CI):
    "files": [{"name": "bootloader", "offset": 0, "file": "bootloader.bin", "sha256": "..."}, ...]}
 Writing bootloader, partition table and app separately leaves the settings (NVS) in between untouched.
 """
+from i18n import tr
 from dataclasses import dataclass
 import hashlib
 import json
@@ -51,16 +52,16 @@ def load(folder=None):
     folder = Path(folder or default_folder())
     manifest = json.loads((folder / 'manifest.json').read_text(encoding='utf-8'))
     if manifest.get('board') != BOARD or manifest.get('chip') != 'esp32s3':
-        raise ValueError('이 보드용 펌웨어가 아니에요 (manifest.json)')
+        raise ValueError(tr('이 보드용 펌웨어가 아니에요 (manifest.json)'))
     images = []
     for entry in manifest['files']:
         data = (folder / entry['file']).read_bytes()
         if hashlib.sha256(data).hexdigest() != entry['sha256']:
-            raise ValueError(f"{entry['file']} 파일이 손상됐어요 (SHA-256 불일치)")
+            raise ValueError(tr('{v0} 파일이 손상됐어요 (SHA-256 불일치)', v0=entry['file']))
         images.append(Image(entry['name'], int(entry['offset']), data))
     names = {x.name for x in images}
     if not {'bootloader', 'partition-table', 'app'} <= names:
-        raise ValueError('manifest.json에 bootloader, partition-table, app이 모두 있어야 해요')
+        raise ValueError(tr('manifest.json에 bootloader, partition-table, app이 모두 있어야 해요'))
     return Bundle(str(manifest.get('version', '?')), flash_bytes(manifest['flash_size']),
                   sorted(images, key=lambda x: x.offset), folder)
 
@@ -72,7 +73,7 @@ def install(port, bundle, reset_settings=False, progress=None, baud=460800, rese
     from esp_rom import RomLoader, Unsupported
     loader = loader or RomLoader(port)
     say = progress or (lambda fraction, text: None)
-    say(0, '다운로드 모드로 들어가는 중')
+    say(0, tr('다운로드 모드로 들어가는 중'))
     loader.connect(reset=reset)
     if baud and baud != port.baudrate:
         loader.change_baud(baud)
@@ -80,12 +81,12 @@ def install(port, bundle, reset_settings=False, progress=None, baud=460800, rese
     jobs = [(x.name, x.offset, x.data) for x in bundle.images]
     if reset_settings:
         if not bundle.nvs:
-            raise ValueError('파티션 표에 설정(NVS) 영역이 없어요')
+            raise ValueError(tr('파티션 표에 설정(NVS) 영역이 없어요'))
         offset, size = bundle.nvs
         jobs.append(('settings', offset, b'\xff' * size))
     total, done, compress = sum(len(data) for _, _, data in jobs), 0, True
     for name, offset, data in jobs:
-        show = lambda f, done=done, size=len(data): say((done + f * size) / total, f'{name} 쓰는 중 (0x{offset:x})')
+        show = lambda f, done=done, size=len(data): say((done + f * size) / total, tr('{v0} 쓰는 중 (0x{v1:x})', v0=name, v1=offset))
         try:
             loader.write(offset, data, show, compress)
         except Unsupported:
@@ -94,7 +95,7 @@ def install(port, bundle, reset_settings=False, progress=None, baud=460800, rese
             compress = False    # this ROM wants plain writes: slower, same result
             loader.write(offset, data, show, compress)
         done += len(data)
-    say(1, '확인 끝, 새 펌웨어로 시작하는 중')
+    say(1, tr('확인 끝, 새 펌웨어로 시작하는 중'))
     loader.hard_reset()
 
 

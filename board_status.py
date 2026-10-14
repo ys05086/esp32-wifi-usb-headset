@@ -1,4 +1,5 @@
 """Read active USB mode independently of the real-time audio worker."""
+from i18n import tr
 import ipaddress
 import json
 import queue
@@ -14,10 +15,10 @@ def fetch_status(host):
     with opener.open(f'http://{host}/status', timeout=2) as response:
         raw = response.read(65537)
     if len(raw) > 65536:
-        raise ValueError('보드 응답이 너무 큽니다')
+        raise ValueError(tr('보드 응답이 너무 큽니다'))
     data = json.loads(raw)
     if not isinstance(data, dict) or data.get('protocol') != 'duplex-v1':
-        raise ValueError('ESP32 헤드셋 상태 응답이 아닙니다')
+        raise ValueError(tr('ESP32 헤드셋 상태 응답이 아닙니다'))
     return data
 
 
@@ -51,7 +52,7 @@ class BoardStatus:
         try:
             ipaddress.IPv4Address(host)
         except ValueError:
-            self.error = '올바른 보드 IPv4 주소를 입력하세요'
+            self.error = tr('올바른 보드 IPv4 주소를 입력하세요')
             return
         if self.pending is None and time.monotonic() >= self.next_check:
             generation = self.generation
@@ -70,13 +71,13 @@ class BoardStatus:
     @property
     def label(self):
         if self.error:
-            return 'USB 모드 · 확인 불가 (보드 주소·연결 확인)'
+            return tr('USB 모드 · 확인 불가 (보드 주소·연결 확인)')
         if self.data is None:
-            return 'USB 모드 · 확인 중…'
+            return tr('USB 모드 · 확인 중…')
         mode = self.data.get('usb_mode')
-        labels = {'standard': 'Standard', 'apple': 'Apple · 아이폰 호환',
-                  'adaptive': 'Adaptive · 피드백 없음 (실험)'}
-        return '현재 USB 모드 · ' + labels.get(mode, '알 수 없음 (펌웨어 확인)')
+        labels = {'standard': 'Standard', 'apple': tr('Apple · 아이폰 호환'),
+                  'adaptive': tr('Adaptive · 피드백 없음 (실험)')}
+        return tr('현재 USB 모드 · ') + labels.get(mode, tr('알 수 없음 (펌웨어 확인)'))
 
     def report(self):
         return {'host': self.host, 'checked_at_unix': self.checked_at,

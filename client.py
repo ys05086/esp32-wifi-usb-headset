@@ -1,4 +1,5 @@
 """PC audio endpoints <-> Wi-Fi ESP32 USB headset for phone calls."""
+from i18n import tr
 import ipaddress
 import queue
 import secrets
@@ -37,7 +38,7 @@ class HeadsetClient:
         self.microphone_ramp = GainRamp()
         self.input_clipped_samples = 0
         self.mic_muted = self.return_muted = False
-        self.status = '연결 준비 중'
+        self.status = tr('연결 준비 중')
         self.sent = self.input_drops = self.audio_errors = 0
         self.capture_errors = self.playback_errors = 0
         self.board_received = self.board_underruns = self.board_return_drops = 0
@@ -103,7 +104,7 @@ class HeadsetClient:
                         self.quality_drops += 1
                 self.quality_report = self.processor.report()
         except Exception as error:
-            self.quality_error = f'AAC 처리 실패: {error}'
+            self.quality_error = tr('AAC 처리 실패: {v0}', v0=error)
             self.stop_event.set()
 
     def run(self):
@@ -115,7 +116,7 @@ class HeadsetClient:
                 # the GUI thread does not initialize this audio worker's COM.
                 result = ctypes.windll.ole32.CoInitializeEx(None, 0)
                 if result not in (0, 1):
-                    raise RuntimeError(f'Windows 오디오 초기화 실패: 0x{result & 0xffffffff:08X}')
+                    raise RuntimeError(tr('Windows 오디오 초기화 실패: 0x{v0:08X}', v0=result & 4294967295))
                 com_initialized = True
                 timer = ctypes.windll.winmm; timer.timeBeginPeriod(1)
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -137,7 +138,7 @@ class HeadsetClient:
                 instant_capture = self.input_rate == 48000 and self.quality.mode == 'pcm'
                 capture_ready = instant_capture
                 prime_blocks = self.quality.prime_blocks if self.quality.mode == 'aac' else 4
-                self.status = '보드 응답 대기'
+                self.status = tr('보드 응답 대기')
                 while not self.stop_event.is_set():
                     now = time.monotonic()
                     if now >= next_send:
@@ -170,13 +171,13 @@ class HeadsetClient:
                             except BlockingIOError: break
                             if len(data) == 24 and data[:4] == b'VSA2':
                                 _, self.board_received, self.board_underruns, _, _, self.board_return_drops = struct.unpack('<4sIIIII', data)
-                                last_ack = time.monotonic(); self.status = '양방향 연결됨 · 기기 소리는 선택한 출력으로 재생'
+                                last_ack = time.monotonic(); self.status = tr('양방향 연결됨 · 기기 소리는 선택한 출력으로 재생')
                             elif not self.listening.state(data): self.returns.push(data)
                     if now - max(started, last_ack) > 8:
-                        raise RuntimeError('보드 응답 없음: IP·같은 네트워크·양방향 펌웨어를 확인하세요.')
-                    if last_ack and now-last_ack>2: self.status = '보드 응답이 지연되고 있어요.'
+                        raise RuntimeError(tr('보드 응답 없음: IP·같은 네트워크·양방향 펌웨어를 확인하세요.'))
+                    if last_ack and now-last_ack>2: self.status = tr('보드 응답이 지연되고 있어요.')
                 if self.quality_error: raise RuntimeError(self.quality_error)
-                self.status = '연결 종료 · USB 마이크는 무음'
+                self.status = tr('연결 종료 · USB 마이크는 무음')
         except Exception as error:
             self.status = str(error)
         finally:

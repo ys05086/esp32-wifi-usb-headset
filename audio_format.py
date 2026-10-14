@@ -1,4 +1,5 @@
 """Negotiate endpoint formats; keep network PCM fixed at 48 kHz."""
+from i18n import tr
 import numpy as np
 import sounddevice as sd
 import soxr
@@ -19,8 +20,8 @@ def endpoint_format(device, direction):
                 return rate, count
             except sd.PortAudioError:
                 pass
-    label = '입력' if direction == 'input' else '출력'
-    raise ValueError(f'{label} 장치의 지원 오디오 형식을 찾지 못했어요: {info["name"]}. 다른 드라이버 항목을 선택해 주세요.')
+    label = tr('입력') if direction == 'input' else tr('출력')
+    raise ValueError(tr('{v0} 장치의 지원 오디오 형식을 찾지 못했어요: {v1}. 다른 드라이버 항목을 선택해 주세요.', v0=label, v1=info['name']))
 
 
 class PCMConverter:

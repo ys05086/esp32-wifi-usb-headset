@@ -6,6 +6,7 @@ the pinned source (THIRD_PARTY_NOTICES.md). It runs as two child processes, PCM 
 AAC -> PCM; this object feeds the first from the codec worker and threads collect the rest. Nothing here
 runs in the PortAudio callback, and no audio is written to files.
 """
+from i18n import tr
 from collections import deque
 from dataclasses import dataclass, asdict
 import math
@@ -38,9 +39,9 @@ class QualitySettings:
 
     def __post_init__(self):
         if self.mode not in ('pcm', 'aac') or self.sample_rate not in SAMPLE_RATES:
-            raise ValueError('지원하지 않는 음질 설정이에요.')
+            raise ValueError(tr('지원하지 않는 음질 설정이에요.'))
         if self.bitrate_kbps not in bitrates_for(self.sample_rate):
-            raise ValueError('이 샘플레이트에서 지원하지 않는 AAC 비트레이트예요.')
+            raise ValueError(tr('이 샘플레이트에서 지원하지 않는 AAC 비트레이트예요.'))
 
     @classmethod
     def restore(cls, value):
@@ -54,7 +55,7 @@ class QualitySettings:
 
     @property
     def label(self):
-        return '원음 PCM · AAC 끔' if self.mode == 'pcm' else f'AAC · {self.sample_rate / 1000:g} kHz · {self.bitrate_kbps} kbps'
+        return tr('원음 PCM · AAC 끔') if self.mode == 'pcm' else f'AAC · {self.sample_rate / 1000:g} kHz · {self.bitrate_kbps} kbps'
 
     @property
     def prime_blocks(self):
@@ -71,7 +72,7 @@ def ffmpeg_path():
     found = os.environ.get('ESP32_BRIDGE_FFMPEG') or shutil.which('ffmpeg')
     if found:
         return found
-    raise RuntimeError('AAC에 쓸 ffmpeg를 찾지 못했어요 (앱 폴더의 ffmpeg/ffmpeg.exe).')
+    raise RuntimeError(tr('AAC에 쓸 ffmpeg를 찾지 못했어요 (앱 폴더의 ffmpeg/ffmpeg.exe).'))
 
 
 class AACProcessor:
@@ -127,7 +128,7 @@ class AACProcessor:
                 self.decoder.stdin.write(chunk)
         except (OSError, ValueError) as error:
             if not self.closed:
-                self.error = self.error or f'AAC 전달 실패: {error}'
+                self.error = self.error or tr('AAC 전달 실패: {v0}', v0=error)
         finally:
             try:
                 self.decoder.stdin.close()
@@ -147,7 +148,7 @@ class AACProcessor:
                     self.decoded_frames += len(chunk) // 2
         except (OSError, ValueError) as error:
             if not self.closed:
-                self.error = self.error or f'AAC 복원 실패: {error}'
+                self.error = self.error or tr('AAC 복원 실패: {v0}', v0=error)
 
     def _drain(self, name, proc):
         for line in iter(proc.stderr.readline, b''):
@@ -159,8 +160,8 @@ class AACProcessor:
         for name, proc in (('encoder', self.encoder), ('decoder', self.decoder)):
             code = proc.poll()
             if code is not None and not self.closed:
-                detail = ' / '.join(self.errors[name]) or f'종료 코드 {code}'
-                raise RuntimeError(f'AAC {name} 프로세스가 멈췄어요: {detail}')
+                detail = ' / '.join(self.errors[name]) or tr('종료 코드 {v0}', v0=code)
+                raise RuntimeError(tr('AAC {v0} 프로세스가 멈췄어요: {v1}', v0=name, v1=detail))
 
     def _blocks(self):
         with self.lock:
@@ -180,7 +181,7 @@ class AACProcessor:
             self.encoder.stdin.write(pcm)
         except OSError as error:
             self._check()
-            raise RuntimeError(f'AAC 인코더에 쓰지 못했어요: {error}') from error
+            raise RuntimeError(tr('AAC 인코더에 쓰지 못했어요: {v0}', v0=error)) from error
         with self.lock:
             self.input_frames += 480
         return self._blocks()
